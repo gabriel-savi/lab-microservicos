@@ -69,7 +69,7 @@ graph TB
 ## 📁 Estrutura de Pastas
 
 ```
-logs-with-loki/
+lab-microservicos/
 ├── docker-compose.yml              # infra + todos os serviços
 ├── .env.example
 ├── config/

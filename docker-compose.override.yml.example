@@ -18,6 +18,6 @@ services:
   #     - LOG_LEVEL=debug
   
   # Exemplo de como expor portas adicionais apenas para desenvolvimento local
-  # python-api:
+  # api-rest:
   #   ports:
   #     - "5001:5000"  # Porta adicional para acesso direto ao container

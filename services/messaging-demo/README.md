@@ -2,7 +2,7 @@
 
 API REST em **Flask** que demonstra comunicação síncrona e assíncrona com **RabbitMQ**, instrumentada com **Prometheus** (métricas), **OpenTelemetry** (tracing distrubuído) e persistência em **PostgreSQL**. Desenvolvida para uso como serviço de exemplo em aulas de **Arquitetura de Microsserviços**.
 
-> 📦 Este serviço faz parte do laboratório de observabilidade [josemanzoli/logs-with-loki](https://github.com/josemanzoli/logs-with-loki).
+> 📦 Este serviço faz parte do laboratório de observabilidade [josemanzoli/lab-microservicos](https://github.com/josemanzoli/lab-microservicos).
 
 ## Stack
 
@@ -19,7 +19,7 @@ API REST em **Flask** que demonstra comunicação síncrona e assíncrona com **
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                        python-api                            │
+│                        messaging-demo                      │
 │                                                              │
 │  app.py (Flask)              consumer.py (Worker)            │
 │  ├── /health/live            ├── Idempotência (In-Memory)    │
@@ -99,7 +99,7 @@ O Grafana 8+ possui um **Alertmanager embutido** — sem precisar de container e
 ## Estrutura do projeto
 
 ```
-python-api/
+messaging-demo/
 ├── src/
 │   ├── database.py      # Configuração PostgreSQL e Modelos SQLAlchemy
 │   ├── tracing.py       # Configuração OpenTelemetry (OTLP Exporter)
@@ -123,8 +123,8 @@ python-api/
 ## Como executar (standalone)
 
 ```sh
-git clone https://github.com/josemanzoli/python-api
-cd python-api
+git clone https://github.com/josemanzoli/lab-microservicos
+cd lab-microservicos/services/messaging-demo
 pip install -r requirements.txt
 
 # Configurar variáveis (assumindo serviços externos rodando)
@@ -139,7 +139,7 @@ python app.py
 python consumer.py
 ```
 
-> Para rodar com a infraestrutura completa (Loki, Grafana, Postgres, Tempo, etc.), veja o repositório [josemanzoli/logs-with-loki](https://github.com/josemanzoli/logs-with-loki).
+> Para rodar com a infraestrutura completa (Loki, Grafana, Postgres, Tempo, etc.), veja o repositório [josemanzoli/lab-microservicos](https://github.com/josemanzoli/lab-microservicos).
 
 ## License
 

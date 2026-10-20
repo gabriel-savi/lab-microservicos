@@ -18,7 +18,7 @@ scrape_configs:
     static_configs:
       - targets: ['payment:5000']
 
-  - job_name: 'python-api'
+  - job_name: 'api-rest'
     static_configs:
       - targets: ['api-rest:5000']
 

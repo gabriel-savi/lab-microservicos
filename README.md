@@ -51,8 +51,8 @@ Infraestrutura: **Nginx** (gateway), **PostgreSQL**, **RabbitMQ**, **Loki + Prom
 ## Como executar
 
 ```sh
-git clone https://github.com/josemanzoli/logs-with-loki
-cd logs-with-loki
+git clone https://github.com/josemanzoli/lab-microservicos
+cd lab-microservicos
 
 cp .env.example .env          # ajuste senhas se quiser
 docker compose up -d --build
@@ -120,7 +120,7 @@ Cada serviço expõe sua própria **OpenAPI/Swagger** em `http://<serviço>/docs
 ## Estrutura
 
 ```
-logs-with-loki/
+lab-microservicos/
 ├── shared/lab_common/        # biblioteca: logger, tracing, rabbitmq, worker, http_client, db, health, correlation
 ├── services/                 # 8 serviços (apis + workers)
 │   ├── messaging-demo/       # exemplo legado (Pub/Sub vs Work Queue)

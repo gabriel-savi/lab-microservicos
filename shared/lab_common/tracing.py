@@ -50,4 +50,4 @@ def init_tracing(service_name: str, app=None):
 
 def get_tracer():
     """Retorna o tracer global para criar spans manuais."""
-    return trace.get_tracer("python-api")
+    return trace.get_tracer("lab-common")

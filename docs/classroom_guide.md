@@ -5,7 +5,7 @@ Runbook do instrutor para conduzir a aula de **Arquitetura de Microsserviços** 
 ## 📋 Preparação (antes da aula)
 
 ```bash
-cd ~/Developer/logs-with-loki
+cd ~/Developer/lab-microservicos
 cp .env.example .env                      # senhas padrão
 docker compose down -v                    # garante estado limpo
 docker compose up -d --build              # sobe tudo (1–2 min)
