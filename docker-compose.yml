@@ -65,6 +65,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-messages_db}
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./config/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-messages_db}" ]
       interval: 10s
@@ -168,6 +169,80 @@ services:
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq/
       - rabbitmq-log:/var/log/rabbitmq
+    restart: on-failure
+    logging: *loki-logging
+
+  catalog:
+    build:
+      context: .
+      dockerfile: services/catalog/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-admin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-passw123}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=catalog_db
+      - TEMPO_ENDPOINT=http://tempo:4317
+    restart: on-failure
+    logging: *loki-logging
+
+  payment:
+    build:
+      context: .
+      dockerfile: services/payment/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-admin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-passw123}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=payment_db
+      - PAYMENT_FAILURE_RATE=0.2
+      - TEMPO_ENDPOINT=http://tempo:4317
+    restart: on-failure
+    logging: *loki-logging
+
+  cart:
+    build:
+      context: .
+      dockerfile: services/cart/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      catalog:
+        condition: service_started
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-admin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-passw123}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=cart_db
+      - CATALOG_URL=http://catalog:5000
+      - TEMPO_ENDPOINT=http://tempo:4317
+    restart: on-failure
+    logging: *loki-logging
+
+  order:
+    build:
+      context: .
+      dockerfile: services/order/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      cart:
+        condition: service_started
+      payment:
+        condition: service_started
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-admin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-passw123}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=order_db
+      - CART_URL=http://cart:5000
+      - PAYMENT_URL=http://payment:5000
+      - TEMPO_ENDPOINT=http://tempo:4317
     restart: on-failure
     logging: *loki-logging
 

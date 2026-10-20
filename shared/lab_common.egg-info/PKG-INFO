@@ -1,0 +1,22 @@
+Metadata-Version: 2.4
+Name: lab-common
+Version: 0.1.0
+Summary: Shared utilities for the microservices lab
+Requires-Python: >=3.10
+Requires-Dist: flask==3.1.3
+Requires-Dist: apiflask==3.1.2
+Requires-Dist: marshmallow==3.26.2
+Requires-Dist: pika==1.3.2
+Requires-Dist: prometheus_client==0.24.1
+Requires-Dist: logging_json==0.6.0
+Requires-Dist: pybreaker==1.2.0
+Requires-Dist: sqlalchemy==2.0.40
+Requires-Dist: psycopg2-binary==2.9.10
+Requires-Dist: opentelemetry-api==1.30.0
+Requires-Dist: opentelemetry-sdk==1.30.0
+Requires-Dist: opentelemetry-instrumentation==0.51b0
+Requires-Dist: opentelemetry-instrumentation-flask==0.51b0
+Requires-Dist: opentelemetry-exporter-otlp-proto-grpc==1.30.0
+Requires-Dist: opentelemetry-instrumentation-wsgi==0.51b0
+Requires-Dist: opentelemetry-instrumentation-sqlalchemy==0.51b0
+Requires-Dist: requests==2.32.3
