@@ -1,0 +1,790 @@
+openapi: 3.0.3
+info:
+  title: Lab de Microsserviços — E-commerce API
+  version: 1.0.0
+  description: |
+    API pública do laboratório de **Arquitetura de Microsserviços** (e-commerce de ponta a ponta).
+
+    Todos os endpoints abaixo passam pelo **Nginx API Gateway** (`http://localhost:8080`), que
+    roteia `/api/v1/*` para os serviços internos: `catalog`, `cart`, `order`, `payment`
+    e `api-rest` (exemplo legado `messaging-demo`).
+
+    Conceitos demonstrados: API Gateway, Database-per-Service, comunicação síncrona
+    (HTTP + Circuit Breaker), assíncrona (eventos no RabbitMQ via Outbox), Saga/compensação,
+    idempotência e observabilidade (logs/métricas/tracing).
+  license:
+    name: MIT
+servers:
+  - url: http://localhost:8080
+    description: API Gateway (Nginx) — Docker Compose local
+tags:
+  - name: Catalogo
+    description: CRUD de produtos + reserva/liberação de estoque (saga)
+  - name: Carrinho
+    description: Carrinho; valida preço/catálogo via HTTP
+  - name: Pedidos
+    description: Checkout, saga, Outbox + eventos no RabbitMQ
+  - name: Pagamentos
+    description: Pagamento simulado (falha/latência configuráveis)
+  - name: Mensagens
+    description: Exemplo legado (Pub/Sub vs Work Queue)
+  - name: Saúde
+    description: Liveness/Readiness probes (gateway e por serviço)
+
+paths:
+  # ─────────────────────────── CATÁLOGO ───────────────────────────
+  /api/v1/catalogo/products:
+    get:
+      tags: [Catalogo]
+      summary: Lista produtos do catálogo
+      operationId: listProducts
+      responses:
+        '200':
+          description: Lista de produtos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductList'
+    post:
+      tags: [Catalogo]
+      summary: Cria um produto
+      operationId: createProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductIn'
+      responses:
+        '201':
+          description: Produto criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '422':
+          description: Erro de validação
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/catalogo/products/{productId}:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+    get:
+      tags: [Catalogo]
+      summary: Busca produto por ID
+      operationId: getProduct
+      responses:
+        '200':
+          description: Produto encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Catalogo]
+      summary: Atualiza um produto (campos opcionais)
+      operationId: updateProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductUpdateIn'
+      responses:
+        '200':
+          description: Produto atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/catalogo/products/{productId}/reserve:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+    post:
+      tags: [Catalogo]
+      summary: Reserva estoque (decrementa se disponível — saga)
+      operationId: reserveStock
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockChangeIn'
+      responses:
+        '200':
+          description: Estoque reservado (produto atualizado)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Estoque insuficiente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsufficientStock'
+
+  /api/v1/catalogo/products/{productId}/release:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+    post:
+      tags: [Catalogo]
+      summary: Devolve estoque (compensação da saga)
+      operationId: releaseStock
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockChangeIn'
+      responses:
+        '200':
+          description: Estoque devolvido (produto atualizado)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ─────────────────────────── CARRINHO ───────────────────────────
+  /api/v1/carrinho/carts/{cartId}/items:
+    parameters:
+      - $ref: '#/components/parameters/CartId'
+    post:
+      tags: [Carrinho]
+      summary: Adiciona item ao carrinho (valida produto no catálogo via HTTP)
+      operationId: addCartItem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CartItemIn'
+      responses:
+        '201':
+          description: Item adicionado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+        '422':
+          description: Erro de validação
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Catálogo indisponível (Circuit Breaker aberto / timeout)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/carrinho/carts/{cartId}:
+    parameters:
+      - $ref: '#/components/parameters/CartId'
+    get:
+      tags: [Carrinho]
+      summary: Consulta carrinho (itens + total)
+      operationId: getCart
+      responses:
+        '200':
+          description: Carrinho
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cart'
+
+  # ─────────────────────────── PEDIDOS ───────────────────────────
+  /api/v1/pedidos/orders:
+    post:
+      tags: [Pedidos]
+      summary: "Cria pedido (checkout: valida carrinho → reserva estoque → pagamento → outbox)"
+      description: |
+        Fluxo da saga:
+        1. Lê o carrinho (HTTP + Circuit Breaker);
+        2. Reserva o estoque de cada item no catálogo (HTTP);
+        3. Processa o pagamento simulado;
+        4. Grava pedido + evento de outbox **no mesmo commit**
+           (`order.paid` ou `order.rejected` → RabbitMQ topic `orders.events`).
+
+        Se o pagamento falhar, o estoque é compensado (liberado) e o pedido fica `REJECTED`.
+      operationId: createOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderIn'
+      responses:
+        '200':
+          description: Pedido criado (PAID ou REJECTED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderOut'
+        '409':
+          description: Rejeitado por estoque insuficiente (reserva falhou)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderOut'
+        '503':
+          description: Cartão pagamento indisponível (pedido rejeitado e estoque compensado)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderOut'
+
+  /api/v1/pedidos/orders/{orderId}:
+    parameters:
+      - $ref: '#/components/parameters/OrderId'
+    get:
+      tags: [Pedidos]
+      summary: Consulta pedido por ID
+      operationId: getOrder
+      responses:
+        '200':
+          description: Pedido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderOut'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ─────────────────────────── PAGAMENTOS ───────────────────────────
+  /api/v1/pagamentos/payments:
+    post:
+      tags: [Pagamentos]
+      summary: Processa pagamento simulado
+      description: |
+        O resultado é aleatório: `PAYMENT_FAILURE_RATE` (default 0.2) define a
+        probabilidade de `REJECTED`; `PAYMENT_LATENCY_MS` (default 0) adiciona latência artificial.
+      operationId: processPayment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentIn'
+      responses:
+        '200':
+          description: Pagamento processado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentOut'
+        '422':
+          description: Erro de validação
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ─────────────────── MENSAGENS (exemplo legado) ───────────────────
+  /api/v1/mensagens/message:
+    post:
+      tags: [Mensagens]
+      summary: Publica mensagem no Pub/Sub (fanout — todos os consumers recebem)
+      description: Exemplo legado (`api-rest` / `services/messaging-demo`).
+      operationId: sendMessage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageIn'
+      responses:
+        '200':
+          description: Mensagem publicada (correlationId gerado)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageOut'
+
+  /api/v1/mensagens/task:
+    post:
+      tags: [Mensagens]
+      summary: Publica tarefa no Work Queue (direct — apenas 1 worker processa)
+      description: Exemplo legado (`api-rest` / `services/messaging-demo`).
+      operationId: sendTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskIn'
+      responses:
+        '200':
+          description: Tarefa publicada (correlationId gerado)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskOut'
+
+  /api/v1/mensagens/messages:
+    get:
+      tags: [Mensagens]
+      summary: Lista mensagens persistidas no PostgreSQL
+      description: Exemplo legado (`api-rest` / `services/messaging-demo`).
+      operationId: listMessages
+      responses:
+        '200':
+          description: Mensagens persistidas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageList'
+
+  /api/v1/mensagens/messages/{correlationId}:
+    parameters:
+      - name: correlationId
+        in: path
+        required: true
+        description: ID de negócio gerado no POST /message
+        schema:
+          type: string
+    get:
+      tags: [Mensagens]
+      summary: Busca mensagem por correlationId
+      description: Exemplo legado (`api-rest` / `services/messaging-demo`).
+      operationId: getMessage
+      responses:
+        '200':
+          description: Mensagem encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageOut'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ─────────────────────── SAÚDE (PROBES) ───────────────────────
+  /health:
+    get:
+      tags: [Saúde]
+      summary: Liveness do gateway
+      description: |
+        **Liveness probe** do próprio Nginx — responde `UP` se o gateway está respondendo.
+      operationId: gatewayLiveness
+      responses:
+        '200':
+          description: Gateway UP
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthLive'
+
+  /health/{service}/live:
+    parameters:
+      - $ref: '#/components/parameters/Service'
+    get:
+      tags: [Saúde]
+      summary: Liveness probe de um serviço
+      description: |
+        **Liveness** (`/health/live` interno do serviço): responde `UP` sempre que o
+        container está vivo, sem checar dependências. Usado por orquestradores
+        (Kubernetes `livenessProbe`) para decidir se o container precisa ser reiniciado.
+      operationId: serviceLiveness
+      responses:
+        '200':
+          description: Serviço vivo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthLive'
+
+  /health/{service}/ready:
+    parameters:
+      - $ref: '#/components/parameters/Service'
+    get:
+      tags: [Saúde]
+      summary: Readiness probe de um serviço
+      description: |
+        **Readiness** (`/health/ready` interno do serviço): além de vivo, verifica as
+        dependências (PostgreSQL e RabbitMQ). Retorna `200/UP` quando pronto para
+        receber tráfego e `503/DOWN` quando alguma dependência está fora do ar.
+        Análogo ao Kubernetes `readinessProbe` (controla entrada no Service/load balancer).
+      operationId: serviceReadiness
+      responses:
+        '200':
+          description: Serviço pronto (dependências UP)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthReady'
+        '503':
+          description: Serviço indisponível (alguma dependência DOWN)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthReady'
+
+components:
+  parameters:
+    Service:
+      name: service
+      in: path
+      required: true
+      description: Serviço interno do e-commerce
+      schema:
+        type: string
+        enum: [catalog, cart, order, payment, api-rest]
+        example: catalog
+    ProductId:
+      name: productId
+      in: path
+      required: true
+      description: ID do produto no catálogo
+      schema:
+        type: integer
+    CartId:
+      name: cartId
+      in: path
+      required: true
+      description: "ID livre do carrinho (ex.: `carrinho-1`)"
+      schema:
+        type: string
+    OrderId:
+      name: orderId
+      in: path
+      required: true
+      description: UUID do pedido (retornado no POST /orders)
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    HealthLive:
+      type: object
+      properties:
+        status:
+          type: string
+          description: Sempre UP se o container está vivo
+          example: UP
+
+    HealthReady:
+      type: object
+      properties:
+        status:
+          type: string
+          description: UP quando pronto, DOWN quando alguma dependência caiu
+          example: UP
+        dependencies:
+          type: object
+          description: Estado de cada dependência checada
+          properties:
+            postgres:
+              type: string
+              enum: [UP, DOWN]
+              example: UP
+            rabbitmq:
+              type: string
+              enum: [UP, DOWN]
+              example: UP
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Mensagem de erro
+      example:
+        error: not found
+
+    Ok:
+      type: object
+      properties:
+        ok:
+          type: boolean
+      example:
+        ok: true
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Notebook
+        price:
+          type: number
+          format: float
+          example: 3500.0
+        stock:
+          type: integer
+          example: 10
+        extendedWarrantyEligible:
+          type: boolean
+          example: true
+
+    ProductList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 5
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+
+    ProductIn:
+      type: object
+      required: [name, price]
+      properties:
+        name:
+          type: string
+          description: Nome do produto
+          example: Cadeira Gamer
+        price:
+          type: number
+          format: float
+          description: Preço
+          example: 899.90
+        stock:
+          type: integer
+          description: Estoque inicial (default 0)
+          default: 0
+          example: 12
+        extendedWarrantyEligible:
+          type: boolean
+          description: Elegível a garantia estendida (default false)
+          default: false
+          example: false
+
+    ProductUpdateIn:
+      type: object
+      description: Todos os campos são opcionais — apenas os enviados são atualizados.
+      properties:
+        name:
+          type: string
+          example: Notebook Pro
+        price:
+          type: number
+          format: float
+          example: 3999.0
+        stock:
+          type: integer
+          example: 8
+        extendedWarrantyEligible:
+          type: boolean
+          example: true
+
+    StockChangeIn:
+      type: object
+      properties:
+        quantity:
+          type: integer
+          description: Quantidade (default 1)
+          default: 1
+          example: 2
+
+    InsufficientStock:
+      type: object
+      properties:
+        error:
+          type: string
+          example: insufficient stock
+        stock:
+          type: integer
+          description: Estoque atualmente disponível
+          example: 3
+
+    CartItemIn:
+      type: object
+      required: [productId]
+      properties:
+        productId:
+          type: integer
+          description: ID do produto no catálogo
+          example: 1
+        quantity:
+          type: integer
+          description: Quantidade (default 1)
+          default: 1
+          example: 2
+
+    CartItem:
+      type: object
+      properties:
+        productId:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Notebook
+        price:
+          type: number
+          format: float
+          example: 3500.0
+        quantity:
+          type: integer
+          example: 2
+
+    Cart:
+      type: object
+      properties:
+        cartId:
+          type: string
+          example: carrinho-1
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CartItem'
+        total:
+          type: number
+          format: float
+          example: 7000.0
+
+    CreateOrderIn:
+      type: object
+      required: [cartId]
+      properties:
+        cartId:
+          type: string
+          description: ID do carrinho a converter em pedido
+          example: carrinho-1
+
+    OrderOut:
+      type: object
+      properties:
+        orderId:
+          type: string
+          format: uuid
+          example: 8b3a4f7e-2c61-4d1a-9e0f-57d2a1b3c4d5
+        status:
+          type: string
+          description: PENDING | PAID | REJECTED
+          example: PAID
+        total:
+          type: number
+          format: float
+          example: 7000.0
+        reason:
+          type: string
+          description: Motivo da rejeição (quando aplicável)
+          example: insufficient stock for 1
+
+    PaymentIn:
+      type: object
+      required: [orderId, amount]
+      properties:
+        orderId:
+          type: string
+          description: ID do pedido
+          example: 8b3a4f7e-2c61-4d1a-9e0f-57d2a1b3c4d5
+        amount:
+          type: integer
+          description: Valor do pedido
+          example: 7000
+
+    PaymentOut:
+      type: object
+      properties:
+        paymentId:
+          type: integer
+          description: ID interno do pagamento
+          example: 1
+        orderId:
+          type: string
+          example: 8b3a4f7e-2c61-4d1a-9e0f-57d2a1b3c4d5
+        amount:
+          type: integer
+          example: 7000
+        status:
+          type: string
+          description: APPROVED | REJECTED
+          example: APPROVED
+
+    MessageIn:
+      type: object
+      required: [name, messageNumber]
+      properties:
+        name:
+          type: string
+          example: minha-mensagem
+        messageNumber:
+          type: integer
+          example: 1
+
+    MessageOut:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: ID interno no banco
+          example: 1
+        name:
+          type: string
+          example: minha-mensagem
+        messageNumber:
+          type: integer
+          example: 1
+        correlationId:
+          type: string
+          description: ID de negócio gerado pela API
+          example: b2a51119-7e50-4f49-88dc-fc5561e41561
+        processingTimeMs:
+          type: integer
+          description: Tempo de processamento no consumer (ms)
+        createdAt:
+          type: string
+          description: Data de persistência (ISO 8601)
+
+    MessageList:
+      type: object
+      properties:
+        count:
+          type: integer
+          example: 42
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessageOut'
+
+    TaskIn:
+      type: object
+      required: [name, taskNumber]
+      properties:
+        name:
+          type: string
+          example: minha-tarefa
+        taskNumber:
+          type: integer
+          example: 1
+
+    TaskOut:
+      type: object
+      properties:
+        name:
+          type: string
+          example: minha-tarefa
+        taskNumber:
+          type: integer
+          example: 1
+        correlationId:
+          type: string
+          example: 5f3c8d21-9a4e-4b7c-b2e1-0f6a7c3d5e8b

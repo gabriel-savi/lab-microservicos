@@ -46,7 +46,17 @@ def check_db():
     except Exception: return False
 
 
-app.register_blueprint(make_health_blueprint(check_db=check_db))
+def check_rabbit():
+    """RabbitMQ faz parte da dependência: o outbox publica eventos nele."""
+    if not rabbitmq_service.is_connected():
+        try:
+            rabbitmq_service.connect()
+        except Exception:
+            return False
+    return rabbitmq_service.is_connected()
+
+
+app.register_blueprint(make_health_blueprint(check_db=check_db, check_rabbit=check_rabbit))
 
 
 def _append_outbox(s, aggregate_id, event_type, routing_key, payload):
