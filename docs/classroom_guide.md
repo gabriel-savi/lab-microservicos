@@ -25,7 +25,8 @@ docker compose up -d --build
 *   **Grafana:** [http://localhost:3000](http://localhost:3000) (admin / `testloki`)
 *   **RabbitMQ Management:** [http://localhost:15672](http://localhost:15672) (admin / `passw123`)
 *   **Prometheus:** [http://localhost:9090](http://localhost:9090)
-*   **API REST (Swagger/Endpoints):** [http://localhost:5000/messages](http://localhost:5000/messages)
+*   **API REST (Swagger UI):** [http://localhost:5000/docs](http://localhost:5000/docs) — OpenAPI interativo
+*   **API Endpoints:** [http://localhost:5000/messages](http://localhost:5000/messages)
 
 ### 📬 Collection do Postman Disponível
 Você e seus alunos podem usar a Collection do Postman pré-configurada para testar todas as rotas da API:
@@ -172,7 +173,7 @@ graph TD
     O script envia 1000 mensagens com delay de 50ms (simulando concorrência real).
     ```bash
     # Acesse o diretório do projeto python-api e execute o script
-    cd ~/Developer/python-api
+    cd python-api
     python test_load.py
     ```
 

@@ -44,6 +44,7 @@ docker compose up -d
 | **RabbitMQ Management** | http://localhost:15672 | admin / `RABBITMQ_PASSWORD` do `.env` |
 | **cAdvisor** | http://localhost:8080 | — |
 | **API Endpoints** | http://localhost:5000/messages | — |
+| **API Swagger (OpenAPI)** | http://localhost:5000/docs | — |
 
 ## Tópicos cobertos na aula
 

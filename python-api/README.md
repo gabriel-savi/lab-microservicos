@@ -46,6 +46,8 @@ API REST em **Flask** que demonstra comunicação síncrona e assíncrona com **
 | `GET` | `/messages` | **FindAll** — Retorna todas as mensagens salvas no banco |
 | `GET` | `/messages/<id>` | **FindByID** — Busca mensagem por `correlationId` |
 | `GET` | `/metrics` | Métricas Prometheus (scraped pelo Prometheus) |
+| `GET` | `/docs` | Swagger UI interativo dos endpoints (OpenAPI) |
+| `GET` | `/openapi.json` | Documentação OpenAPI da API em JSON |
 
 ### Exemplo de request
 

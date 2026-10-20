@@ -1,4 +1,6 @@
 flask==3.1.3
+apiflask==3.1.2
+marshmallow==3.26.2
 pika==1.3.2
 prometheus_client==0.24.1
 logging_json==0.6.0

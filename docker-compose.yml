@@ -109,8 +109,8 @@ services:
 
   api-rest:
     build:
-      context: ./python-api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/messaging-demo/Dockerfile
     ports:
       - "5000:5000"
     depends_on:
@@ -129,8 +129,8 @@ services:
 
   consumer:
     build:
-      context: ./python-api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/messaging-demo/Dockerfile
     command: [ "python", "consumer.py" ]
     depends_on:
       rabbitmq:
@@ -151,8 +151,8 @@ services:
 
   task-consumer:
     build:
-      context: ./python-api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/messaging-demo/Dockerfile
     command: [ "python", "task_consumer.py" ]
     depends_on:
       rabbitmq:

@@ -2,9 +2,7 @@
 
 ## Visão Geral
 
-Dois repositórios complementares formam o laboratório:
-
-| Repositório | Papel | Conteúdo |
+| Projeto  | Papel | Conteúdo |
 |---|---|---|
 | **logs-with-loki** | Infraestrutura (IaC) | Docker Compose + configs de Loki, Promtail, Grafana, Prometheus, Tempo, RabbitMQ, PostgreSQL, cAdvisor |
 | **python-api** | Aplicação (código de negócio) | Flask API + Consumer RabbitMQ + módulos de logging, tracing, database, resiliência |
