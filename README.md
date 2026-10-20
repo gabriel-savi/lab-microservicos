@@ -1,6 +1,6 @@
 # 🛒 Lab de Microsserviços — E-commerce
 
-Laboratório de **Arquitetura de Microsserviços** para aulas de Ciência da Computação (USP). Um e-commerce de ponta a ponta que demonstra, na prática, como sistemas distribuídos funcionam no mercado atual: comunicação síncrona e assíncrona, **API Gateway**, **Database-per-Service**, **Outbox**, **Saga/compensação**, **Circuit Breaker**, **idempotência** e **observabilidade** (logs, métricas e tracing).
+Laboratório de **Arquitetura de Microsserviços** com um e-commerce de ponta a ponta que demonstra, na prática, como sistemas distribuídos funcionam no mercado atual: comunicação síncrona e assíncrona, **API Gateway**, **Database-per-Service**, **Outbox**, **Saga/compensação**, **Circuit Breaker**, **idempotência** e **observabilidade** (logs, métricas e tracing).
 
 ## Arquitetura
 
