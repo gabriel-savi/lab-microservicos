@@ -1,6 +1,7 @@
 import uuid
 from contextvars import ContextVar
 from flask import request, g
+from opentelemetry import trace
 
 # Correlation ID de negócio: começa no gateway (X-Correlation-ID) e é
 # propagado através de chamadas HTTP (via lab_common.http_client) e mensagens.
@@ -30,6 +31,9 @@ def correlation_middleware(app):
         )
         set_correlation_id(cid)
         g.correlation_id = cid
+        span = trace.get_current_span()
+        if span.get_span_context().is_valid:
+            span.set_attribute("messaging.correlation_id", cid)
 
     @app.after_request
     def _after_request(resp):

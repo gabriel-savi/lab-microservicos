@@ -10,7 +10,7 @@ from lab_common.logger import setup_logger
 from lab_common.tracing import init_tracing
 from lab_common.health import make_health_blueprint
 from lab_common.http_client import HttpClient
-from lab_common.correlation import correlation_middleware
+from lab_common.correlation import correlation_middleware, get_correlation_id
 from models import init_db, SessionLocal, Order, OutboxEvent
 from schemas import CreateOrderIn
 from sqlalchemy import text
@@ -114,9 +114,13 @@ def outbox_relay(stop_event):
             pending = s.query(OutboxEvent).filter(OutboxEvent.published == False).order_by(OutboxEvent.id).limit(20).all()
             for ev in pending:
                 try:
+                    payload = json.loads(ev.payload)
+                    # Propaga o correlationId do gateway (X-Correlation-ID) para os
+                    # workers, unificando logs/traces de toda a transação num só ID.
+                    correlation_id = payload.get('correlationId') or ev.aggregate_id
                     rabbitmq_service.publish(
-                        json.loads(ev.payload),
-                        correlation_id=ev.aggregate_id,
+                        payload,
+                        correlation_id=correlation_id,
                         exchange=EXCHANGE,
                         routing_key=ev.routing_key,
                     )
@@ -124,7 +128,7 @@ def outbox_relay(stop_event):
                     ev.published_at = datetime.now(timezone.utc)
                     s.commit()
                     OUTBOX_PUBLISHED.inc()
-                    logger.info('Outbox event published', extra={'eventType': ev.event_type, 'aggregateId': ev.aggregate_id})
+                    logger.info('Outbox event published', extra={'eventType': ev.event_type, 'aggregateId': ev.aggregate_id, 'correlationId': correlation_id})
                 except Exception as e:
                     s.rollback()
                     logger.error(f'outbox publish failed (will retry): {e}', extra={'aggregateId': ev.aggregate_id})
@@ -148,6 +152,7 @@ def create_order(json_data):
     total = cart.get('total', 0)
     items = cart.get('items', [])
     order_id = str(uuid.uuid4())
+    correlation_id = get_correlation_id()
 
     # 1. Reserva de estoque (antes do pagamento) — parte da saga
     try:
@@ -170,7 +175,7 @@ def create_order(json_data):
         o.status = 'REJECTED'
         _release_stock(items)
         _append_outbox(s, order_id, 'order.rejected', 'order.rejected',
-                       {'orderId': order_id, 'status': 'REJECTED', 'cartId': cart_id})
+                       {'orderId': order_id, 'status': 'REJECTED', 'cartId': cart_id, 'correlationId': correlation_id})
         s.commit(); s.close()
         ORDERS_CREATED.labels(status='REJECTED').inc()
         logger.error('Payment call failed; stock released', extra={'orderId': order_id})
@@ -179,14 +184,14 @@ def create_order(json_data):
     if pay.get('status') == 'APPROVED':
         o.status = 'PAID'
         _append_outbox(s, order_id, 'order.paid', 'order.paid',
-                       {'orderId': order_id, 'total': total, 'items': items, 'cartId': cart_id})
+                       {'orderId': order_id, 'total': total, 'items': items, 'cartId': cart_id, 'correlationId': correlation_id})
         ORDERS_CREATED.labels(status='PAID').inc()
         logger.info('Order paid', extra={'orderId': order_id})
     else:
         o.status = 'REJECTED'
         _release_stock(items)
         _append_outbox(s, order_id, 'order.rejected', 'order.rejected',
-                       {'orderId': order_id, 'status': 'REJECTED', 'cartId': cart_id})
+                       {'orderId': order_id, 'status': 'REJECTED', 'cartId': cart_id, 'correlationId': correlation_id})
         ORDERS_CREATED.labels(status='REJECTED').inc()
         logger.info('Order rejected; stock released', extra={'orderId': order_id})
 

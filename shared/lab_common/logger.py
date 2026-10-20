@@ -2,13 +2,14 @@ import logging
 import sys
 import logging_json
 from opentelemetry import trace
+from .correlation import get_correlation_id
 
 
 class OtelContextFilter(logging.Filter):
-    """Injeta traceId e spanId do OpenTelemetry em cada linha de log.
-    
-    Isso permite que o Grafana crie um link direto do log para o trace
-    correspondente no Tempo (Trace-to-Logs / Log-to-Trace).
+    """Injeta traceId, spanId e correlationId em cada linha de log.
+
+    traceId/spanId permitem o link log → trace no Tempo;
+    correlationId permite buscar todos os logs de uma transação de negócio.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -22,6 +23,10 @@ class OtelContextFilter(logging.Filter):
             record.traceId = "0" * 32
             record.spanId = "0" * 16
 
+        # Só preenche do contextvar se o caller não passou correlationId via extra
+        # (ex.: workers de RabbitMQ, onde o contextvar da requisição não existe).
+        if getattr(record, 'correlationId', None) is None:
+            record.correlationId = get_correlation_id()
         return True
 
 
@@ -43,6 +48,7 @@ def setup_logger(name: str) -> logging.Logger:
             # Campos injetados pelo OtelContextFilter:
             "traceId": "traceId",
             "spanId": "spanId",
+            "correlationId": "correlationId",
         })
         logHandler.setFormatter(formatter)
         logger.addHandler(logHandler)
