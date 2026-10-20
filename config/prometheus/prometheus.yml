@@ -2,10 +2,26 @@ global:
   scrape_interval: 5s
 
 scrape_configs:
+  - job_name: 'catalog'
+    static_configs:
+      - targets: ['catalog:5000']
+
+  - job_name: 'cart'
+    static_configs:
+      - targets: ['cart:5000']
+
+  - job_name: 'order'
+    static_configs:
+      - targets: ['order:5000']
+
+  - job_name: 'payment'
+    static_configs:
+      - targets: ['payment:5000']
+
   - job_name: 'python-api'
     static_configs:
       - targets: ['api-rest:5000']
-   
+
   - job_name: 'consumers'
     dns_sd_configs:
       - names:
@@ -19,6 +35,27 @@ scrape_configs:
           - 'task-consumer'
         type: 'A'
         port: 8001
+
+  - job_name: 'invoice-workers'
+    dns_sd_configs:
+      - names:
+          - 'invoice-worker'
+        type: 'A'
+        port: 8000
+
+  - job_name: 'logistics-workers'
+    dns_sd_configs:
+      - names:
+          - 'logistics-worker'
+        type: 'A'
+        port: 8000
+
+  - job_name: 'warranty-workers'
+    dns_sd_configs:
+      - names:
+          - 'warranty-worker'
+        type: 'A'
+        port: 8000
 
   - job_name: 'rabbitmq'
     metrics_path: /metrics/per-object
