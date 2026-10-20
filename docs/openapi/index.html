@@ -3,26 +3,94 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>E-commerce API — Swagger UI</title>
-  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui.css">
+  <title>E-commerce API — ReDoc</title>
   <style>
     body { margin: 0; }
+    #theme-toggle {
+      position: fixed;
+      top: 14px;
+      right: 24px;
+      z-index: 1000;
+      padding: 8px 16px;
+      border: 1px solid rgba(128, 128, 128, 0.4);
+      border-radius: 20px;
+      background: transparent;
+      cursor: pointer;
+      font-size: 13px;
+      font-family: inherit;
+      color: inherit;
+    }
   </style>
 </head>
 <body>
-  <div id="swagger-ui"></div>
-  <script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script>
+  <button id="theme-toggle" type="button" onclick="toggleTheme()">Dark</button>
+  <div id="redoc-container"></div>
+  <script src="https://cdn.jsdelivr.net/npm/redoc@2.1.5/bundles/redoc.standalone.js"></script>
   <script>
-    window.onload = function () {
-      SwaggerUIBundle({
-        url: './ecommerce.yaml',
-        dom_id: '#swagger-ui',
-        deepLinking: true,
-        displayRequestDuration: true,
-        presets: [SwaggerUIBundle.presets.apis],
-        layout: 'BaseLayout'
-      });
+    const LIGHT_THEME = {
+      sidebar: { backgroundColor: '#fafafa' }
     };
+
+    const DARK_THEME = {
+      colors: {
+        primary: { main: '#8b7cf6' },
+        text: { primary: '#e5e7eb', secondary: '#9ca3af' },
+        gray: { 50: '#0b1220', 100: '#111827' },
+        border: {
+          dark: 'rgba(255,255,255,0.15)',
+          light: 'rgba(255,255,255,0.08)'
+        },
+        http: {
+          get: '#34d399',
+          post: '#60a5fa',
+          put: '#fbbf24',
+          delete: '#f87171',
+          patch: '#a78bfa',
+          options: '#94a3b8',
+          head: '#94a3b8',
+          basic: '#94a3b8',
+          link: '#94a3b8'
+        }
+      },
+      sidebar: {
+        backgroundColor: '#0b1220',
+        textColor: '#9ca3af',
+        activeTextColor: '#8b7cf6',
+        groupItems: { textColor: '#e5e7eb' }
+      },
+      rightPanel: {
+        backgroundColor: '#111827',
+        textColor: '#d1d5db'
+      }
+    };
+
+    const container = document.getElementById('redoc-container');
+    const toggleBtn = document.getElementById('theme-toggle');
+    let mode = localStorage.getItem('redoc-theme') || 'light';
+
+    function render() {
+      Redoc.init(
+        './ecommerce.yaml',
+        {
+          theme: mode === 'dark' ? DARK_THEME : LIGHT_THEME,
+          scrollYOffset: 64,
+          expandSingleSchemaField: true,
+          hideSingleRequestSampleTab: false
+        },
+        container
+      );
+      toggleBtn.textContent = mode === 'dark' ? 'Light' : 'Dark';
+      toggleBtn.style.color = mode === 'dark' ? '#e5e7eb' : '#333';
+    }
+
+    function toggleTheme() {
+      mode = mode === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('redoc-theme', mode);
+      container.innerHTML = '';
+      render();
+    }
+
+    render();
   </script>
 </body>
 </html>

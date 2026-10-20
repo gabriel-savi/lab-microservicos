@@ -74,6 +74,8 @@ Se só quiser recriar os databases sem apagar o volume: `./scripts/reset_db.sh`.
 | Interface | URL |
 |---|---|
 | **API Gateway** | http://localhost:8080 |
+| **ReDoc** (documentação combinada) | http://localhost:8080/docs (ou `/redoc`) |
+| **Swagger UI** (com Try it out) | http://localhost:8080/docs/swagger.html |
 | **Grafana** | http://localhost:3000 (`admin` / senha do `.env`) |
 | **Prometheus** | http://localhost:9090 |
 | **Tempo** | http://localhost:3200 |
@@ -94,7 +96,7 @@ Se só quiser recriar os databases sem apagar o volume: `./scripts/reset_db.sh`.
 | POST | `/api/v1/pagamentos/payments` | Processa pagamento (simulado) |
 | GET | `/api/v1/pedidos/metrics` | Métricas Prometheus do order |
 
-Cada serviço expõe sua própria **OpenAPI/Swagger** em `http://<serviço>/docs` e `/openapi.json`.
+> Documentação combinada de **todos os serviços** em ReDoc (`/docs`) ou Swagger UI com Try it out (`/docs/swagger.html`). Internamente, cada serviço também expõe seu próprio OpenAPI (`/docs`, `/openapi.json`), mas o acesso externo é pelo gateway.
 
 ## Demos (scripts prontos)
 
@@ -128,7 +130,7 @@ lab-microservicos/
 │   └── invoice/ logistics/ warranty/
 ├── config/                   # nginx, prometheus, grafana, loki, tempo, postgres
 ├── scripts/                  # demos + reset + seed
-├── docs/                     # Postman + roteiro de aula
+├── docs/                     # ReDoc + Swagger UI (OpenAPI combinado) + Postman + roteiro de aula
 └── docker-compose.yml        # âncoras YAML + env vars (12-factor)
 ```
 
