@@ -192,15 +192,15 @@ Os workers reutilizam o padrão do `consumer.py` atual: **retry com backoff expo
 
 ### Fase 3 — Gateway, resiliência e polish
 
-- [ ] **Nginx API Gateway** (`:8080`):
-  - [ ] Roteia `/catalogo/*` → catalog, `/carrinho/*` → cart, `/pedidos/*` → order, `/pagamentos/*` → payment
+- [x] **Nginx API Gateway** (`:8080`):
+  - [x] Roteia `/catalogo/*` → catalog, `/carrinho/*` → cart, `/pedidos/*` → order, `/pagamentos/*` → payment
   - [ ] `/docs` de cada serviço acessível via path (Swagger)
-  - [ ] Gera/propaga `X-Correlation-ID`
-  - [ ] Rate limit simples (didático)
-- [ ] **Resiliência reforçada**:
-  - [ ] Timeouts explícitos em todas as chamadas inter-serviço
-  - [ ] Demo em aula: `PAYMENT_FAILURE_RATE=1.0` + derrubar payment → pedido rejeita rápido com 503 (CB aberto)
-- [ ] **Compensação didática**: `order.rejected` → logistics/warranty registram `IGNORED` (saga simplificada)
+  - [x] Gera/propaga `X-Correlation-ID`
+  - [x] Rate limit simples (didático)
+- [x] **Resiliência reforçada**:
+  - [x] Timeouts explícitos em todas as chamadas inter-serviço
+  - [x] Demo em aula: `PAYMENT_FAILURE_RATE=1.0` + derrubar payment → pedido rejeita rápido com 503 (CB aberto)
+- [x] **Compensação didática**: `order.rejected` → logistics/warranty registram `IGNORED` (saga simplificada)
 - [ ] Dashboard Grafana reorganizado por serviço (RED + containers + filas + eventos)
 - [ ] `scripts/demo_flow.sh` (cenário de aula) e `test_load.py` adaptado para o fluxo de pedidos
 - [ ] Atualizar `README.md`, `docs/classroom_guide.md` e coleção do Postman; diagrama mermaid final
@@ -271,20 +271,20 @@ Os workers reutilizam o padrão do `consumer.py` atual: **retry com backoff expo
 
 ### ❌ Lacunas críticas (quebram conceitos centrais da aula)
 
-| # | Problema | Impacto | Onde corrigir |
+| # | Problema | Impacto | Status |
 |---|---|---|---|
-| C1 | **Prometheus não coleta os novos serviços.** `scrape_configs` só tem `python-api`, `consumers`, `task-consumers`, `rabbitmq`, `cadvisor`. Não existem jobs para catalog/cart/order/payment (porta 5000) nem para invoice/logistics/warranty workers (porta 8000) | Os microserviços **não aparecem em métricas/Grafana** — o pilar de métricas do lab está cego | `config/prometheus/prometheus.yml` |
-| C2 | **Circuit Breaker do `http_client` não funciona.** Um `pybreaker.CircuitBreaker` é criado **dentro de `call()`** a cada requisição, então `fail_max` nunca acumula e o circuito **nunca abre** | A demo "derrubar o payment e ver o pedido rejeitar rápido" (prometida na Fase 3) não acontece; conceito de resiliência fica falso | `shared/lab_common/http_client.py` |
-| C3 | **Tracing quebrado entre chamadas HTTP.** `HttpClient.call` usa `requests` sem injetar o contexto W3C (via `propagate.inject`), ao contrário do que já é feito no RabbitMQ | O trace para de "atravessar" serviços no Tempo: cart→catalog, order→cart e order→payment não continuam o mesmo trace | `shared/lab_common/http_client.py` |
-| C4 | **`init.sql` incompleto + falha em redeploy.** O arquivo só cria `invoice_db/logistics_db/warranty_db`; os 4 databases core (`catalog_db`, `cart_db`, `order_db`, `payment_db`) foram criados manualmente via `docker exec`. E o script só roda quando o volume `postgres-data` está vazio | Um aluno que clona do zero `docker compose down -v` perde os DBs; sem `-v`, os novos DBs nunca nascem | `config/postgres/init.sql` + documentação |
+| C1 | **Prometheus não coleta os novos serviços** (só messaging-demo antigo) | microserviços não aparecem em métricas | ✅ resolvido (Fase 4) |
+| C2 | **Circuit Breaker não funciona** (`pybreaker` criado a cada chamada, nunca acumula falha) | demo de resiliência falsa | ✅ resolvido (Fase 4) |
+| C3 | **Tracing quebrado entre chamadas HTTP** (`requests` sem W3C) | trace para de atravessar serviços | ✅ resolvido (Fase 4) |
+| C4 | **`init.sql` incompleto + falha em redeploy** (DBs core criados manualmente) | clone do zero perde databases | ✅ resolvido (Fase 4) |
 
 ### ⚠️ Lacunas de qualidade/mercado (não quebram, mas afastam do "mundo real")
 
-| # | Problema | Por que importa |
-|---|---|---|
-| Q1 | **Sem Outbox / mensageria transacional.** `order` persiste o pedido e publica o evento **depois do commit**; se o `publish` falhar, existe pedido `PAID` sem NF/logística/garantia | Padrão obrigatório em qualquer sistema de pedidos real; excelente gancho didático |
-| Q2 | **Idempotência só em memória** (`processed_cache` set) e sem constraint `unique` no banco | Não sobrevive a restart nem a consumidor duplicado |
-| Q3 | **`order.rejected` não é consumido.** Existe o routing key, mas nenhuma fila faz bind — a "saga/compensação" da Fase 3 é só narrativa | Compensação (estorno de estoque, cancelamento de entrega) é um dos temas mais cobrados no mercado |
+| # | Problema | Por que importa | Status |
+|---|---|---|---|
+| Q1 | **Sem Outbox / mensageria transacional** (`publish` depois do commit) | padrão obrigatório em sistemas de pedidos | ✅ resolvido (Fase 5) |
+| Q2 | **Idempotência só em memória** (sem constraint `unique`) | não sobrevive a restart/replica | ✅ resolvido (Fase 5) |
+| Q3 | **`order.rejected` não é consumido** — saga só narrativa | compensação é tema cobrado no mercado | ✅ resolvido (Fase 5) |
 | Q4 | **`README.md` e `docs/classroom_guide.md` desatualizados** — ainda descrevem só o lab antigo de observabilidade, sem os 8 serviços | Aluno novo não sabe nem o que existe |
 | Q5 | **Validação de entrada ausente** nos serviços novos (só `request.get_json()`). `marshmallow`/apiflask só no messaging-demo | Contrato/validação de payload é básico |
 | Q6 | **Sem CI/CD** (nenhum workflow GitHub Actions), sem lint, sem testes | Mercado atual = PR validado por pipeline |
@@ -303,19 +303,24 @@ Os workers reutilizam o padrão do `consumer.py` atual: **retry com backoff expo
 
 > Ordens por prioridade de impacto didático. Cada fase é independente e termina em estado funcional.
 
-### Fase 4 — Corrigir os pilares de observabilidade e resiliência (críticos)
+### Fase 4 — Corrigir os pilares de observabilidade e resiliência (críticos) ✅ RESOLVIDA
 
-- [ ] **Prometheus**: adicionar jobs static para `catalog:5000`, `cart:5000`, `order:5000`, `payment:5000` e `dns_sd` para `invoice-worker`, `logistics-worker`, `warranty-worker` (porta 8000)
-- [ ] **http_client**: Circuit Breaker **persistente por downstream** (dicionário `{nome: breaker}` na instância) e **injeção de contexto W3C** (`propagate.inject` nos headers) — reaproveitar o padrão já usado no RabbitMQ
-- [ ] **init.sql**: listar os 7 databases (core + workers); documentar `docker compose down -v` para reset e criar um `scripts/reset_db.sh` que cria os DBs sem apagar o volume
-- [ ] **Critério de validação**: `docker compose up -d --build` do zero sobe tudo; `GET /metrics` de cada serviço aparece no Prometheus targets; um pedido gera **trace único** atravessando gateway→order→cart/payment→evento→3 workers no Tempo; `PAYMENT_FAILURE_RATE=1.0` + queda do payment → pedido rejeita com 503 após CB abrir (ver evento de abertura no log)
+- [x] **Prometheus**: adicionar jobs static para `catalog:5000`, `cart:5000`, `order:5000`, `payment:5000` e `dns_sd` para `invoice-worker`, `logistics-worker`, `warranty-worker` (porta 8000)
+- [x] **http_client**: Circuit Breaker **persistente por downstream** (dicionário `{nome: breaker}` na instância) e **injeção de contexto W3C** (`propagate.inject` nos headers) — reaproveitar o padrão já usado no RabbitMQ
+- [x] **init.sql**: listar os 7 databases (core + workers); documentar `docker compose down -v` para reset e criar um `scripts/reset_db.sh` que cria os DBs sem apagar o volume
+- [x] **Critério de validação**: 9/10 targets `up` no Prometheus (só `cadvisor` down no macOS); trace único no Tempo (W3C injetado no HTTP confirmado); CB abriu após `fail_max=2` e passou a rejeitar com `CircuitBreakerError` imediato
 
-### Fase 5 — Confiabilidade de produção (Outbox, idempotência real, saga)
+> **Anotação (dívida técnica descoberta)**: o Nginx falha em iniciar se um upstream estiver parado (`host not found in upstream`). Movida para a Fase 7 como *gateway resiliente* (resolver Docker DNS + `proxy_pass` por variável).
 
-- [ ] **Outbox pattern** no `order`: tabela `outbox_events` no mesmo commit do pedido; um relay (thread ou processo) publica no RabbitMQ e marca como enviado — garantir *at-least-once* na publicação de `order.paid`/`order.rejected`
-- [ ] **Idempotência persistente**: `unique` constraint em `correlationId`/`order_id` nas tabelas dos workers + upsert (em vez de set em memória)
-- [ ] **Consumir `order.rejected`**: filas de compensação (catalog devolve estoque; logistics marca `CANCELLED`; warranty registra `SKIPPED`) — saga orquestrada simples (coreografia atual vira caso de aula)
-- [ ] **Critério de validação**: matar o RabbitMQ antes do publish (simular falha) e depois religar → evento emitido do outbox sem perder pedido; reprocessar a mesma mensagem não duplica registros
+### Fase 5 — Confiabilidade de produção (Outbox, idempotência real, saga) ✅ RESOLVIDA
+
+- [x] **Outbox pattern** no `order`: tabela `outbox_events` **no mesmo commit** do pedido; um relay em background (thread) publica no RabbitMQ e marca como `published` — *at-least-once* na publicação de `order.paid`/`order.rejected`
+- [x] **Idempotência persistente**: `unique` constraint em `order_id` (invoice), `(order_id, product_id)` (warranty) + checagem/upsert no handler — em vez de set em memória
+- [x] **Consumir `order.rejected`**: compensation (`order.rejected`) → logistics marca `CANCELLED`; warranty `SKIPPED`; catálogo devolve estoque via `POST /products/:id/release`
+- [x] **Saga com reserva de estoque**: catálogo ganhou `POST /products/:id/reserve` e `/release`; order reserva estoque antes do pagamento e libera na rejeição
+- [x] **Critério de validação**: happy path (PAID) → estoque decrementado, outbox `published=true`, invoice/delivery/warranty criados; rejeição (payment parado) → estoque devolvido, `order.rejected` no outbox, sem delivery/warranty; evento `order.paid` duplicado republicado → **1** invoice (idempotente)
+
+> **Nota de migração**: `create_all` não altera tabelas existentes; em volume pré-existente, aplicar `ALTER TABLE ... UNIQUE` manual (feito neste ambiente) ou `docker compose down -v` para recreatedo zero.
 
 ### Fase 6 — Contrato, gateway e demonstração
 
@@ -347,12 +352,12 @@ Os workers reutilizam o padrão do `consumer.py` atual: **retry com backoff expo
 | Comunicação síncrona vs eventos | ✅ implementado |
 | Database-per-service | ✅ implementado |
 | API Gateway + rate limit | ✅ (falta auth na Fase 6) |
-| Observabilidade 3 pilares | ⚠️ corrigir Prometheus (Fase 4) |
-| Distributed tracing end-to-end | ⚠️ corrigir injeção HTTP (Fase 4) |
-| Circuit Breaker + timeout | ⚠️ CB quebrado (Fase 4) |
-| Outbox / mensageria transacional | ❌ Fase 5 |
-| Idempotência durável | ❌ Fase 5 |
-| Saga / compensação | ❌ Fase 5 |
+| Observabilidade 3 pilares | ✅ corrigido (Fase 4) |
+| Distributed tracing end-to-end | ✅ corrigido (Fase 4) |
+| Circuit Breaker + timeout | ✅ corrigido (Fase 4) |
+| Outbox / mensageria transacional | ✅ Fase 5 |
+| Idempotência durável | ✅ Fase 5 |
+| Saga / compensação | ✅ Fase 5 |
 | Validação de contrato / OpenAPI | ⚠️ Fase 6 |
 | CI/CD + lint | ❌ Fase 7 |
 | Config por ambiente (12-factor) | ⚠️ Fase 7 |

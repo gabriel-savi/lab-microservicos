@@ -87,6 +87,47 @@ def update_product(pid):
     return r, 200
 
 
+@app.post('/products/<int:pid>/reserve')
+def reserve_stock(pid):
+    """Reserva estoque (saga): decrementa se houver quantidade disponível."""
+    REQUEST_COUNT.labels(method='POST', endpoint='/products/:id/reserve').inc()
+    data = __import__('flask').request.get_json() or {}
+    qty = int(data.get('quantity', 1))
+    s = SessionLocal()
+    p = s.query(Product).filter(Product.id == pid).first()
+    if not p:
+        s.close()
+        return {'error': 'not found'}, 404
+    if p.stock < qty:
+        s.close()
+        return {'error': 'insufficient stock', 'stock': p.stock}, 409
+    p.stock -= qty
+    s.commit()
+    logger.info('Stock reserved', extra={'productId': pid, 'quantity': qty, 'remaining': p.stock})
+    r = to_dict(p)
+    s.close()
+    return r, 200
+
+
+@app.post('/products/<int:pid>/release')
+def release_stock(pid):
+    """Devolve estoque (compensação): incrementa."""
+    REQUEST_COUNT.labels(method='POST', endpoint='/products/:id/release').inc()
+    data = __import__('flask').request.get_json() or {}
+    qty = int(data.get('quantity', 1))
+    s = SessionLocal()
+    p = s.query(Product).filter(Product.id == pid).first()
+    if not p:
+        s.close()
+        return {'error': 'not found'}, 404
+    p.stock += qty
+    s.commit()
+    logger.info('Stock released', extra={'productId': pid, 'quantity': qty, 'remaining': p.stock})
+    r = to_dict(p)
+    s.close()
+    return r, 200
+
+
 @app.get('/metrics')
 def metrics():
     return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)

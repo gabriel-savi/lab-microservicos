@@ -10,7 +10,7 @@ class Invoice(Base):
     __tablename__ = 'invoices'
     id = Column(Integer, primary_key=True)
     invoice_id = Column(String, unique=True, nullable=False)
-    order_id = Column(String, nullable=False)
+    order_id = Column(String, unique=True, nullable=False)
     total = Column(Numeric(10, 2), nullable=False)
 
 

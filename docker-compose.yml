@@ -249,6 +249,8 @@ services:
         condition: service_started
       payment:
         condition: service_started
+      catalog:
+        condition: service_started
       rabbitmq:
         condition: service_healthy
     environment:
@@ -258,6 +260,7 @@ services:
       - POSTGRES_DB=order_db
       - CART_URL=http://cart:5000
       - PAYMENT_URL=http://payment:5000
+      - CATALOG_URL=http://catalog:5000
       - RABBITMQ_HOST=rabbitmq
       - TEMPO_ENDPOINT=http://tempo:4317
     restart: on-failure

@@ -1,4 +1,3 @@
-import os
 import time
 import json
 import random
@@ -10,16 +9,8 @@ from .rabbitmq import rabbitmq_service
 from .tracing import init_tracing, get_tracer
 
 
-def run_worker(service_name: str, queue_name: str, handler, metrics_port: int = 8000,
-               max_retries: int = 3, initial_delay: float = 0.5, simulate_fail_rate: float = 0.0):
-    logger = setup_logger(f"{service_name}-logger")
-    init_tracing(f"{service_name}-worker")
-    tracer = get_tracer()
-
-    PROCESSED = Counter(f'{service_name}_processed_total', f'Total {service_name} processed')
-    ERRORS = Counter(f'{service_name}_errors_total', f'Total {service_name} errors')
-    processed_cache = set()
-
+def _make_callback(service_name, handler, logger, tracer, processed_cache,
+                   PROCESSED, ERRORS, max_retries, initial_delay, simulate_fail_rate):
     def callback(ch, method, properties, body):
         start_time = time.time()
         context = propagate.extract(properties.headers or {})
@@ -27,7 +18,7 @@ def run_worker(service_name: str, queue_name: str, handler, metrics_port: int = 
             try:
                 decoded = body.decode('utf-8')
                 data = json.loads(decoded)
-                correlation_id = properties.correlation_id or data.get('correlationId') or data.get('correlation_id')
+                correlation_id = properties.correlation_id or data.get('correlationId') or data.get('correlation_id') or data.get('orderId')
                 span.set_attribute("messaging.correlation_id", correlation_id or "unknown")
 
                 if correlation_id in processed_cache:
@@ -61,6 +52,24 @@ def run_worker(service_name: str, queue_name: str, handler, metrics_port: int = 
             except Exception as e:
                 logger.error(f"Unexpected error: {str(e)}")
                 ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+    return callback
+
+
+def run_workers(service_name, bindings, metrics_port=8000, max_retries=3, initial_delay=0.5,
+                simulate_fail_rate=0.0):
+    """Consome múltiplas filas. `bindings` é uma lista de (queue_name, handler).
+
+    Idempotência: o cache em memória deduplica em execução; a durabilidade real
+    (sobreviver a restart/replica) deve vir de constraint UNIQUE + upsert no
+    handler de cada serviço.
+    """
+    logger = setup_logger(f"{service_name}-logger")
+    init_tracing(f"{service_name}-worker")
+    tracer = get_tracer()
+
+    PROCESSED = Counter(f'{service_name}_processed_total', f'Total {service_name} processed')
+    ERRORS = Counter(f'{service_name}_errors_total', f'Total {service_name} errors')
+    processed_cache = set()
 
     try:
         start_http_server(metrics_port)
@@ -68,9 +77,19 @@ def run_worker(service_name: str, queue_name: str, handler, metrics_port: int = 
         rabbitmq_service.connect()
         ch = rabbitmq_service.channel
         ch.basic_qos(prefetch_count=1)
-        ch.basic_consume(queue=queue_name, on_message_callback=callback, auto_ack=False)
+        for queue, handler in bindings:
+            cb = _make_callback(service_name, handler, logger, tracer, processed_cache,
+                                PROCESSED, ERRORS, max_retries, initial_delay, simulate_fail_rate)
+            ch.basic_consume(queue=queue, on_message_callback=cb, auto_ack=False)
         logger.info("[*] Waiting for messages")
         ch.start_consuming()
     except KeyboardInterrupt:
         rabbitmq_service.close()
         sys.exit(0)
+
+
+def run_worker(service_name, queue_name, handler, metrics_port=8000, max_retries=3,
+               initial_delay=0.5, simulate_fail_rate=0.0):
+    """Compat: consume uma única fila."""
+    run_workers(service_name, [(queue_name, handler)], metrics_port, max_retries,
+                initial_delay, simulate_fail_rate)
