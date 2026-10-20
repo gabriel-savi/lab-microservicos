@@ -7,10 +7,11 @@ from apiflask import APIFlask
 from flask import request, Response
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST, Counter
 from lab_common.logger import setup_logger
-from lab_common.tracing import init_tracing
+from lab_common.tracing import init_tracing, get_tracer
 from lab_common.health import make_health_blueprint
 from lab_common.http_client import HttpClient
-from lab_common.correlation import correlation_middleware, get_correlation_id
+from lab_common.correlation import correlation_middleware, get_correlation_id, set_correlation_id
+from opentelemetry import propagate
 from models import init_db, SessionLocal, Order, OutboxEvent
 from schemas import CreateOrderIn
 from sqlalchemy import text
@@ -60,6 +61,10 @@ app.register_blueprint(make_health_blueprint(check_db=check_db, check_rabbit=che
 
 
 def _append_outbox(s, aggregate_id, event_type, routing_key, payload):
+    # Congela o W3C Trace Context da requisição dentro do evento: como a publicação
+    # acontece depois (outra thread), é isso que permite ao relay continuar o MESMO
+    # trace original (traceparent/tracestate) lá na frente.
+    propagate.inject(payload)
     s.add(OutboxEvent(
         event_id=str(uuid.uuid4()),
         aggregate_id=aggregate_id,
@@ -115,20 +120,25 @@ def outbox_relay(stop_event):
             for ev in pending:
                 try:
                     payload = json.loads(ev.payload)
-                    # Propaga o correlationId do gateway (X-Correlation-ID) para os
-                    # workers, unificando logs/traces de toda a transação num só ID.
+                    # Restaura no relay o trace context congelado no evento (thread da
+                    # requisição já morreu): o span "outbox_publish" vira o pai do que
+                    # for injetado na mensagem, e os workers continuam o trace original.
+                    context = propagate.extract(payload)
                     correlation_id = payload.get('correlationId') or ev.aggregate_id
-                    rabbitmq_service.publish(
-                        payload,
-                        correlation_id=correlation_id,
-                        exchange=EXCHANGE,
-                        routing_key=ev.routing_key,
-                    )
-                    ev.published = True
-                    ev.published_at = datetime.now(timezone.utc)
-                    s.commit()
-                    OUTBOX_PUBLISHED.inc()
-                    logger.info('Outbox event published', extra={'eventType': ev.event_type, 'aggregateId': ev.aggregate_id, 'correlationId': correlation_id})
+                    set_correlation_id(correlation_id)
+                    with get_tracer().start_as_current_span("outbox_publish", context=context) as span:
+                        span.set_attribute("messaging.correlation_id", correlation_id)
+                        rabbitmq_service.publish(
+                            payload,
+                            correlation_id=correlation_id,
+                            exchange=EXCHANGE,
+                            routing_key=ev.routing_key,
+                        )
+                        ev.published = True
+                        ev.published_at = datetime.now(timezone.utc)
+                        s.commit()
+                        OUTBOX_PUBLISHED.inc()
+                        logger.info('Outbox event published', extra={'eventType': ev.event_type, 'aggregateId': ev.aggregate_id, 'correlationId': correlation_id})
                 except Exception as e:
                     s.rollback()
                     logger.error(f'outbox publish failed (will retry): {e}', extra={'aggregateId': ev.aggregate_id})
