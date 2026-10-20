@@ -1,4 +1,3 @@
-CREATE DATABASE catalog_db;
-CREATE DATABASE cart_db;
-CREATE DATABASE order_db;
-CREATE DATABASE payment_db;
+CREATE DATABASE invoice_db;
+CREATE DATABASE logistics_db;
+CREATE DATABASE warranty_db;

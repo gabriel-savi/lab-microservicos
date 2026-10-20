@@ -9,6 +9,7 @@ from lab_common.http_client import HttpClient
 from models import init_db, SessionLocal, Order
 from sqlalchemy import text
 import uuid
+from lab_common.rabbitmq import rabbitmq_service
 
 app = APIFlask(__name__, title='Order Service', version='1.0.0')
 logger = setup_logger('order')
@@ -21,6 +22,13 @@ PAYMENT_URL = os.getenv('PAYMENT_URL', 'http://payment:5000')
 
 REQUEST_COUNT = Counter('http_requests_total', 'HTTP', ['method', 'endpoint'])
 ORDERS_CREATED = Counter('orders_created_total', 'Orders created', ['status'])
+
+try:
+    rabbitmq_service.connect()
+    rabbitmq_service.declare_topic_exchange('orders.events', [])
+except Exception:
+    pass
+
 
 def check_db():
     try:
@@ -41,6 +49,7 @@ def create_order():
     except Exception as e:
         return {'error': f'cart error: {e}'}, 503
     total = cart.get('total', 0)
+    items = cart.get('items', [])
     order_id = str(uuid.uuid4())
     s = SessionLocal()
     o = Order(order_id=order_id, cart_id=cart_id, total=total, status='PENDING')
@@ -53,15 +62,27 @@ def create_order():
         s.commit(); s.close()
         ORDERS_CREATED.labels(status='REJECTED').inc()
         logger.error('Payment call failed', extra={'orderId': order_id})
+        try:
+            rabbitmq_service.publish({'orderId': order_id, 'status': 'REJECTED'}, correlation_id=order_id, exchange='orders.events', routing_key='order.rejected')
+        except Exception:
+            pass
         return {'orderId': order_id, 'status': 'REJECTED', 'reason': str(e)}, 503
     if pay.get('status') == 'APPROVED':
         o.status = 'PAID'
         ORDERS_CREATED.labels(status='PAID').inc()
         logger.info('Order paid', extra={'orderId': order_id})
+        try:
+            rabbitmq_service.publish({'orderId': order_id, 'total': total, 'items': items, 'cartId': cart_id}, correlation_id=order_id, exchange='orders.events', routing_key='order.paid')
+        except Exception as ex:
+            logger.error(f'publish failed {ex}')
     else:
         o.status = 'REJECTED'
         ORDERS_CREATED.labels(status='REJECTED').inc()
         logger.info('Order rejected', extra={'orderId': order_id})
+        try:
+            rabbitmq_service.publish({'orderId': order_id, 'status': 'REJECTED'}, correlation_id=order_id, exchange='orders.events', routing_key='order.rejected')
+        except Exception:
+            pass
     s.commit()
     status_res = o.status
     s.close()

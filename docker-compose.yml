@@ -235,6 +235,8 @@ services:
         condition: service_started
       payment:
         condition: service_started
+      rabbitmq:
+        condition: service_healthy
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-admin}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-passw123}
@@ -242,6 +244,67 @@ services:
       - POSTGRES_DB=order_db
       - CART_URL=http://cart:5000
       - PAYMENT_URL=http://payment:5000
+      - RABBITMQ_HOST=rabbitmq
+      - TEMPO_ENDPOINT=http://tempo:4317
+    restart: on-failure
+    logging: *loki-logging
+
+  invoice-worker:
+    build:
+      context: .
+      dockerfile: services/invoice/Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-admin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-passw123}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=invoice_db
+      - RABBITMQ_HOST=rabbitmq
+      - TEMPO_ENDPOINT=http://tempo:4317
+    restart: on-failure
+    logging: *loki-logging
+
+  logistics-worker:
+    build:
+      context: .
+      dockerfile: services/logistics/Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-admin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-passw123}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=logistics_db
+      - RABBITMQ_HOST=rabbitmq
+      - TEMPO_ENDPOINT=http://tempo:4317
+    restart: on-failure
+    logging: *loki-logging
+
+  warranty-worker:
+    build:
+      context: .
+      dockerfile: services/warranty/Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      catalog:
+        condition: service_started
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-admin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-passw123}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=warranty_db
+      - RABBITMQ_HOST=rabbitmq
+      - CATALOG_URL=http://catalog:5000
       - TEMPO_ENDPOINT=http://tempo:4317
     restart: on-failure
     logging: *loki-logging
