@@ -3,6 +3,17 @@ x-logging: &loki-logging
   options:
     tag: "{{.ImageName}}|{{.Name}}|{{.ImageFullID}}|{{.FullID}}"
 
+x-app-env: &app-env
+  POSTGRES_USER: ${POSTGRES_USER:-admin}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-passw123}
+  POSTGRES_HOST: postgres
+  TEMPO_ENDPOINT: ${TEMPO_ENDPOINT:-http://tempo:4317}
+  ENV: ${ENV:-development}
+
+x-app-defaults: &app-defaults
+  restart: on-failure
+  logging: *loki-logging
+
 services:
   loki:
     image: grafana/loki:3.0.0
@@ -77,7 +88,7 @@ services:
     image: gcr.io/cadvisor/cadvisor:latest
     container_name: cadvisor
     ports:
-      - "8080:8080"
+      - "8081:8080"
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
@@ -105,10 +116,11 @@ services:
       - ~/.docker-conf/rabbitmq/data/:/var/lib/rabbitmq/
       - ~/.docker-conf/rabbitmq/log/:/var/log/rabbitmq
     environment:
-      - RABBITMQ_DEFAULT_USER=admin
-      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-passw123}
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-passw123}
 
   api-rest:
+    <<: *app-defaults
     build:
       context: .
       dockerfile: services/messaging-demo/Dockerfile
@@ -120,15 +132,11 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      - POSTGRES_USER=${POSTGRES_USER:-admin}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-passw123}
-      - POSTGRES_HOST=postgres
-      - POSTGRES_DB=${POSTGRES_DB:-messages_db}
-      - TEMPO_ENDPOINT=http://tempo:4317
-    restart: on-failure
-    logging: *loki-logging
+      <<: *app-env
+      POSTGRES_DB: ${POSTGRES_DB:-messages_db}
 
   consumer:
+    <<: *app-defaults
     build:
       context: .
       dockerfile: services/messaging-demo/Dockerfile
@@ -139,18 +147,11 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      - POSTGRES_USER=${POSTGRES_USER:-admin}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-passw123}
-      - POSTGRES_HOST=postgres
-      - POSTGRES_DB=${POSTGRES_DB:-messages_db}
-      - TEMPO_ENDPOINT=http://tempo:4317
-    volumes:
-      - rabbitmq-data:/var/lib/rabbitmq/
-      - rabbitmq-log:/var/log/rabbitmq
-    restart: on-failure
-    logging: *loki-logging
+      <<: *app-env
+      POSTGRES_DB: ${POSTGRES_DB:-messages_db}
 
   task-consumer:
+    <<: *app-defaults
     build:
       context: .
       dockerfile: services/messaging-demo/Dockerfile
@@ -161,16 +162,8 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      - POSTGRES_USER=${POSTGRES_USER:-admin}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-passw123}
-      - POSTGRES_HOST=postgres
-      - POSTGRES_DB=${POSTGRES_DB:-messages_db}
-      - TEMPO_ENDPOINT=http://tempo:4317
-    volumes:
-      - rabbitmq-data:/var/lib/rabbitmq/
-      - rabbitmq-log:/var/log/rabbitmq
-    restart: on-failure
-    logging: *loki-logging
+      <<: *app-env
+      POSTGRES_DB: ${POSTGRES_DB:-messages_db}
 
   api-gateway:
     image: nginx:1.27-alpine
@@ -187,6 +180,7 @@ services:
     logging: *loki-logging
 
   catalog:
+    <<: *app-defaults
     build:
       context: .
       dockerfile: services/catalog/Dockerfile
@@ -194,15 +188,11 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      - POSTGRES_USER=${POSTGRES_USER:-admin}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-passw123}
-      - POSTGRES_HOST=postgres
-      - POSTGRES_DB=catalog_db
-      - TEMPO_ENDPOINT=http://tempo:4317
-    restart: on-failure
-    logging: *loki-logging
+      <<: *app-env
+      POSTGRES_DB: catalog_db
 
   payment:
+    <<: *app-defaults
     build:
       context: .
       dockerfile: services/payment/Dockerfile
@@ -210,16 +200,13 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      - POSTGRES_USER=${POSTGRES_USER:-admin}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-passw123}
-      - POSTGRES_HOST=postgres
-      - POSTGRES_DB=payment_db
-      - PAYMENT_FAILURE_RATE=0.2
-      - TEMPO_ENDPOINT=http://tempo:4317
-    restart: on-failure
-    logging: *loki-logging
+      <<: *app-env
+      POSTGRES_DB: payment_db
+      PAYMENT_FAILURE_RATE: ${PAYMENT_FAILURE_RATE:-0.2}
+      PAYMENT_LATENCY_MS: ${PAYMENT_LATENCY_MS:-0}
 
   cart:
+    <<: *app-defaults
     build:
       context: .
       dockerfile: services/cart/Dockerfile
@@ -229,16 +216,12 @@ services:
       catalog:
         condition: service_started
     environment:
-      - POSTGRES_USER=${POSTGRES_USER:-admin}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-passw123}
-      - POSTGRES_HOST=postgres
-      - POSTGRES_DB=cart_db
-      - CATALOG_URL=http://catalog:5000
-      - TEMPO_ENDPOINT=http://tempo:4317
-    restart: on-failure
-    logging: *loki-logging
+      <<: *app-env
+      POSTGRES_DB: cart_db
+      CATALOG_URL: http://catalog:5000
 
   order:
+    <<: *app-defaults
     build:
       context: .
       dockerfile: services/order/Dockerfile
@@ -254,19 +237,15 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - POSTGRES_USER=${POSTGRES_USER:-admin}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-passw123}
-      - POSTGRES_HOST=postgres
-      - POSTGRES_DB=order_db
-      - CART_URL=http://cart:5000
-      - PAYMENT_URL=http://payment:5000
-      - CATALOG_URL=http://catalog:5000
-      - RABBITMQ_HOST=rabbitmq
-      - TEMPO_ENDPOINT=http://tempo:4317
-    restart: on-failure
-    logging: *loki-logging
+      <<: *app-env
+      POSTGRES_DB: order_db
+      CART_URL: http://cart:5000
+      PAYMENT_URL: http://payment:5000
+      CATALOG_URL: http://catalog:5000
+      RABBITMQ_HOST: rabbitmq
 
   invoice-worker:
+    <<: *app-defaults
     build:
       context: .
       dockerfile: services/invoice/Dockerfile
@@ -276,16 +255,13 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      - POSTGRES_USER=${POSTGRES_USER:-admin}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-passw123}
-      - POSTGRES_HOST=postgres
-      - POSTGRES_DB=invoice_db
-      - RABBITMQ_HOST=rabbitmq
-      - TEMPO_ENDPOINT=http://tempo:4317
-    restart: on-failure
-    logging: *loki-logging
+      <<: *app-env
+      POSTGRES_DB: invoice_db
+      RABBITMQ_HOST: rabbitmq
+      INVOICE_FAIL_RATE: ${INVOICE_FAIL_RATE:-0.0}
 
   logistics-worker:
+    <<: *app-defaults
     build:
       context: .
       dockerfile: services/logistics/Dockerfile
@@ -295,16 +271,12 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      - POSTGRES_USER=${POSTGRES_USER:-admin}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-passw123}
-      - POSTGRES_HOST=postgres
-      - POSTGRES_DB=logistics_db
-      - RABBITMQ_HOST=rabbitmq
-      - TEMPO_ENDPOINT=http://tempo:4317
-    restart: on-failure
-    logging: *loki-logging
+      <<: *app-env
+      POSTGRES_DB: logistics_db
+      RABBITMQ_HOST: rabbitmq
 
   warranty-worker:
+    <<: *app-defaults
     build:
       context: .
       dockerfile: services/warranty/Dockerfile
@@ -316,15 +288,10 @@ services:
       catalog:
         condition: service_started
     environment:
-      - POSTGRES_USER=${POSTGRES_USER:-admin}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-passw123}
-      - POSTGRES_HOST=postgres
-      - POSTGRES_DB=warranty_db
-      - RABBITMQ_HOST=rabbitmq
-      - CATALOG_URL=http://catalog:5000
-      - TEMPO_ENDPOINT=http://tempo:4317
-    restart: on-failure
-    logging: *loki-logging
+      <<: *app-env
+      POSTGRES_DB: warranty_db
+      RABBITMQ_HOST: rabbitmq
+      CATALOG_URL: http://catalog:5000
 
 volumes:
   grafana-data:
@@ -332,4 +299,3 @@ volumes:
   postgres-data:
   rabbitmq-data:
   rabbitmq-log:
-

@@ -1,26 +1,52 @@
-# Observability Lab: Loki, Grafana, Prometheus, Tempo & RabbitMQ
+# 🛒 Lab de Microsserviços — E-commerce
 
-Laboratório de observabilidade e mensageria para uso em aulas de **Arquitetura de Microsserviços**. Este projeto demonstra na prática conceitos como logs centralizados, métricas, distributed tracing, comunicação assíncrona, resiliência e persistência.
+Laboratório de **Arquitetura de Microsserviços** para aulas de Ciência da Computação (USP). Um e-commerce de ponta a ponta que demonstra, na prática, como sistemas distribuídos funcionam no mercado atual: comunicação síncrona e assíncrona, **API Gateway**, **Database-per-Service**, **Outbox**, **Saga/compensação**, **Circuit Breaker**, **idempotência** e **observabilidade** (logs, métricas e tracing).
 
-## Stack
+## Arquitetura
 
-| Serviço | Função |
-|---|---|
-| **Loki** | Agregação e armazenamento de logs |
-| **Grafana** | Visualização de logs, métricas e traces |
-| **Prometheus** | Coleta e armazenamento de métricas |
-| **Tempo** | Armazenamento de traces distribuídos (OTLP) |
-| **PostgreSQL** | Persistência de dados das mensagens processadas |
-| **cAdvisor** | Exporta métricas de hardware/CPU/RAM dos containers |
-| **RabbitMQ** | Message broker (comunicação assíncrona) |
-| **Python API** | API REST Flask — produz mensagens e expõe métricas/traces |
-| **Python Consumer** | Worker assíncrono — consome mensagens da fila Pub/Sub, persiste e gera traces |
-| **Python Task Consumer** | Worker assíncrono — consome tarefas da fila Work Queue, processa e gera traces |
+```mermaid
+graph LR
+    Client[Client / Postman] --> GW[Nginx Gateway :8080]
 
-## Pré-requisitos
+    subgraph Síncrono
+        GW --> CAT[catalog]
+        GW --> CART[cart]
+        GW --> ORD[order]
+        GW --> PAY[payment]
+        CART -->|HTTP + CB| CAT
+        ORD -->|HTTP + CB| CART
+        ORD -->|HTTP + CB| PAY
+        ORD -->|reserva estoque| CAT
+    end
 
-- [Docker](https://www.docker.com/)
-- [Docker Compose](https://docs.docker.com/compose/)
+    subgraph Assíncrono
+        ORD -->|outbox → order.paid / order.rejected| RMQ{RabbitMQ topic}
+        RMQ --> INV[invoice-worker]
+        RMQ --> LOG[logistics-worker]
+        RMQ --> WAR[warranty-worker]
+    end
+
+    subgraph Observabilidade
+        LOKI[Loki] --- GRAF[Grafana]
+        PROM[Prometheus] --- GRAF
+        TEMPO[Tempo] --- GRAF
+    end
+```
+
+## Serviços
+
+| Serviço | Tipo | Responsabilidade | Banco |
+|---|---|---|---|
+| **catalog** | API Flask | CRUD de produtos + reserva/liberação de estoque | `catalog_db` |
+| **cart** | API Flask | Carrinho; valida preço/catálogo via HTTP | `cart_db` |
+| **order** | API Flask | Checkout, saga, **Outbox** + publicação de eventos | `order_db` |
+| **payment** | API Flask | Pagamento simulado (falha/latência configuráveis) | `payment_db` |
+| **invoice** (`invoice-worker`) | Worker | Emissão de NF (assíncrona) | `invoice_db` |
+| **logistics** (`logistics-worker`) | Worker | Agenda entrega; compensa `order.rejected` | `logistics_db` |
+| **warranty** (`warranty-worker`) | Worker | Garantia estendida (itens elegíveis) | `warranty_db` |
+| **messaging-demo** | API + workers | *Exemplo legado*: Pub/Sub vs Work Queue | `messages_db` |
+
+Infraestrutura: **Nginx** (gateway), **PostgreSQL**, **RabbitMQ**, **Loki + Promtail**, **Prometheus**, **Grafana Tempo**, **Grafana**, **cAdvisor**.
 
 ## Como executar
 
@@ -28,95 +54,101 @@ Laboratório de observabilidade e mensageria para uso em aulas de **Arquitetura 
 git clone https://github.com/josemanzoli/logs-with-loki
 cd logs-with-loki
 
-# Copie e configure as variáveis de ambiente
-cp .env.example .env   # ajuste as senhas se necessário
-
-docker compose up -d
+cp .env.example .env          # ajuste senhas se quiser
+docker compose up -d --build
 ```
+
+> Primeira subida leva ~1–2 min (build das imagens + criação dos databases). O catálogo é **seedado automaticamente** com 5 produtos.
+
+### Reset completo (voltar ao zero)
+
+```sh
+docker compose down -v        # remove databases e filas
+docker compose up -d --build
+```
+
+Se só quiser recriar os databases sem apagar o volume: `./scripts/reset_db.sh`.
 
 ## Acessos
 
-| Interface | URL | Credenciais |
+| Interface | URL |
+|---|---|
+| **API Gateway** | http://localhost:8080 |
+| **Grafana** | http://localhost:3000 (`admin` / senha do `.env`) |
+| **Prometheus** | http://localhost:9090 |
+| **Tempo** | http://localhost:3200 |
+| **RabbitMQ Management** | http://localhost:15672 (`admin` / senha do `.env`) |
+
+> Dashboards no Grafana: **"E-commerce Microservices"** (serviços novos) e **"Microservices Observability"** (exemplo legado).
+
+## API pública (via gateway, versionada)
+
+| Método | Path | Descrição |
 |---|---|---|
-| **Grafana** | http://localhost:3000 | admin / `GRAFANA_PASSWORD` do `.env` |
-| **Prometheus** | http://localhost:9090 | — |
-| **Tempo (API)** | http://localhost:3200 | — |
-| **RabbitMQ Management** | http://localhost:15672 | admin / `RABBITMQ_PASSWORD` do `.env` |
-| **cAdvisor** | http://localhost:8080 | — |
-| **API Endpoints** | http://localhost:5000/messages | — |
-| **API Swagger (OpenAPI)** | http://localhost:5000/docs | — |
+| GET | `/api/v1/catalogo/products` | Lista produtos |
+| POST | `/api/v1/catalogo/products` | Cria produto |
+| POST | `/api/v1/carrinho/carts/:id/items` | Adiciona item ao carrinho |
+| GET | `/api/v1/carrinho/carts/:id` | Consulta carrinho |
+| POST | `/api/v1/pedidos/orders` | Cria pedido (checkout + pagamento) |
+| GET | `/api/v1/pedidos/orders/:id` | Consulta pedido |
+| POST | `/api/v1/pagamentos/payments` | Processa pagamento (simulado) |
+| GET | `/api/v1/pedidos/metrics` | Métricas Prometheus do order |
 
-## Tópicos cobertos na aula
+Cada serviço expõe sua própria **OpenAPI/Swagger** em `http://<serviço>/docs` e `/openapi.json`.
 
-- **Logs centralizados** com Loki + Promtail + Grafana
-- **Distributed Tracing** com **Grafana Tempo** — rastreie o fluxo completo (API → RabbitMQ → Consumers de mensagens e tarefas)
-- **Trace-to-Logs** — Pule de um trace no Tempo diretamente para os logs no Loki usando o `correlationId`
-- **Métricas de aplicação** com `prometheus_client` (Flask)
-- **Métricas de infraestrutura** com cAdvisor (CPU/RAM por container)
-- **Persistência SQL** — Mensagens salvas em **PostgreSQL** via worker assíncrono
-- **Comunicação assíncrona** via RabbitMQ (DLQ, Retry com Backoff, Idempotência)
-- **Resiliência (Circuit Breaker)** — Proteção de falhas em cascata com `pybreaker`
-- **Health Checks Profundos** — Liveness e Readiness probes integradas ao estado do circuito
-- **Painel de DLQ e Erros** — visualiza taxas de erro dos consumers e dead letter queue no Grafana
-- **Métricas de Filas RabbitMQ** — visualiza o tamanho das filas (logs, tasks e DLQ) em tempo real no Grafana
+## Demos (scripts prontos)
 
-## Estrutura do projeto
+```sh
+./scripts/demo_flow.sh      # happy path: catálogo → carrinho → pedido → NF/logística/garantia
+./scripts/demo_chaos.sh     # derruba o payment → Circuit Breaker abre → pedido rejeita rápido
+./scripts/load_orders.sh 50 # carga de 50 pedidos (observa métricas/DLQ)
+./scripts/smoke_test.sh     # valida endpoints em poucos segundos
+```
+
+## Conceitos cobertos
+
+- **API Gateway** (Nginx): roteamento `/api/v1/*`, rate limit, `X-Correlation-ID`
+- **Database-per-Service**: 7 databases num PostgreSQL
+- **Comunicação síncrona** (HTTP) vs **assíncrona** (eventos no RabbitMQ topic)
+- **Circuit Breaker + timeout** entre serviços (`lab_common.http_client`)
+- **Outbox Pattern**: publicação de eventos transacional (at-least-once)
+- **Saga / compensação**: reserva de estoque + `order.rejected` cancelando logística/garantia
+- **Idempotência durável** (constraints UNIQUE + upsert)
+- **Validação de contrato** (marshmallow/apiflask) e **versionamento** de API
+- **Observabilidade**: logs (Loki), métricas (Prometheus), tracing distribuído (Tempo) com **correlation ID** e **W3C Trace Context** de ponta a ponta
+
+## Estrutura
 
 ```
 logs-with-loki/
-├── config/
-│   ├── grafana/provisioning/  # Datasources automáticos (Loki, Prometheus, Tempo)
-│   ├── loki/                  # Configuração do Loki
-│   ├── promtail/              # Configuração do Promtail
-│   ├── prometheus/            # Scrape config p/ API e cAdvisor
-│   └── tempo/                 # Configuração de armazenamento de traces
-├── docker-compose.yml
-└── .env                       # Variáveis de ambiente (não commitado)
+├── shared/lab_common/        # biblioteca: logger, tracing, rabbitmq, worker, http_client, db, health, correlation
+├── services/                 # 8 serviços (apis + workers)
+│   ├── messaging-demo/       # exemplo legado (Pub/Sub vs Work Queue)
+│   ├── catalog/ cart/ order/ payment/
+│   └── invoice/ logistics/ warranty/
+├── config/                   # nginx, prometheus, grafana, loki, tempo, postgres
+├── scripts/                  # demos + reset + seed
+├── docs/                     # Postman + roteiro de aula
+└── docker-compose.yml        # âncoras YAML + env vars (12-factor)
 ```
 
-## Repositórios Relacionados
+## Configuração por ambiente
 
-- **[josemanzoli/python-api](https://github.com/josemanzoli/python-api)** — Repositório da aplicação usada neste laboratório. Contém a lógica de negócio, instrumentação OTel e modelos SQL.
+As variáveis de simulação ficam no `.env` (12-factor):
+
+| Variável | Default | Efeito |
+|---|---|---|
+| `PAYMENT_FAILURE_RATE` | `0.2` | Probabilidade do pagamento ser recusado |
+| `PAYMENT_LATENCY_MS` | `0` | Latência artificial do pagamento (ms) |
+| `INVOICE_FAIL_RATE` | `0.0` | Probabilidade de falha do invoice (→ DLQ) |
+
+## CI
+
+GitHub Actions (`.github/workflows/ci.yml`): lint (sintaxe Python + `docker compose config`), build das imagens e **smoke test end-to-end**.
 
 ## ⚠️ Limitações conhecidas
 
-### cAdvisor no macOS
-Devido às diferenças no funcionamento do Docker Desktop para macOS e Linux, o serviço cAdvisor pode não funcionar corretamente em sistemas macOS. Isso ocorre porque o cAdvisor depende de acesso direto a caminhos do sistema Linux como `/sys`, `/dev/disk` e `/dev/kmsg`, que não estão disponíveis da mesma forma no macOS.
-
-**Impacto**: Métricas de uso de CPU e RAM por container podem não estar disponíveis no painel do Grafana, mas o restante da stack (logs, traces, métricas de aplicação) funciona normalmente.
-
-**Solução para usuários macOS**: Se você está usando macOS e deseja evitar mensagens de erro relacionadas ao cAdvisor, tem duas opções:
-
-1. **Desativar completamente o cAdvisor** (recomendado para focar nos conceitos principais do lab):
-   Crie um arquivo `docker-compose.override.yml` com o seguinte conteúdo:
-   ```yaml
-   services:
-     cadvisor:
-       # Esta substituição de comando efetivamente desativa o serviço
-       command: ["sh", "-c", "echo 'cAdvisor intencionalmente desativado no macOS'; sleep infinity"]
-   ```
-
-2. **Tentar uma configuração mínima** (pode funcionar parcialmente em algumas versões do Docker Desktop):
-   ```yaml
-   services:
-     cadvisor:
-       image: gcr.io/cadvisor/cadvisor:latest
-       container_name: cadvisor
-       ports:
-         - "8080:8080"
-       volumes:
-         - /var/run/docker.sock:/var/run/docker.sock:ro
-         - /var/lib/docker/:/var/lib/docker:ro
-       # Remover mounts problemáticos: /sys, /dev/disk, /dev/kmsg e privileged: true
-   ```
-
-> **Nota**: O foco principal deste laboratório é a observabilidade de aplicação (logs, traces, métricas de negócio). Mesmo sem o cAdvisor, você ainda poderá explorar todos os conceitos centrais usando:
-> - Métricas de aplicação via Prometheus (`http_requests_total`, `messages_published_total`, etc.)
-> - Logs centralizados com Loki e Grafana
-> - Traces distribuídos com Tempo
-> - Health checks e circuit breaker
-
-## Créditos
+- **cAdvisor** não expõe métricas corretamente no macOS (usa paths Linux). Desative com `docker-compose.override.yml` se desejar (o resto da stack funciona normalmente).
 
 ## License
 

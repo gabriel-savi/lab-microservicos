@@ -1,3 +1,18 @@
+# Docker / Compose
 docker-compose.override.yml
 .DS_Store
 .env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+*.egg
+.pytest_cache/
+.ruff_cache/
+
+# Artefatos acidentais de build/execução
+services/*/shared/

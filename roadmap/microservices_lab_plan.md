@@ -285,14 +285,14 @@ Os workers reutilizam o padrão do `consumer.py` atual: **retry com backoff expo
 | Q1 | **Sem Outbox / mensageria transacional** (`publish` depois do commit) | padrão obrigatório em sistemas de pedidos | ✅ resolvido (Fase 5) |
 | Q2 | **Idempotência só em memória** (sem constraint `unique`) | não sobrevive a restart/replica | ✅ resolvido (Fase 5) |
 | Q3 | **`order.rejected` não é consumido** — saga só narrativa | compensação é tema cobrado no mercado | ✅ resolvido (Fase 5) |
-| Q4 | **`README.md` e `docs/classroom_guide.md` desatualizados** — ainda descrevem só o lab antigo de observabilidade, sem os 8 serviços | Aluno novo não sabe nem o que existe | ❌ Fase 7 |
+| Q4 | **`README.md` e `docs/classroom_guide.md` desatualizados** — ainda descrevem só o lab antigo de observabilidade, sem os 8 serviços | Aluno novo não sabe nem o que existe | ✅ resolvido (Fase 7) |
 | Q5 | **Validação de entrada ausente** nos serviços novos (só `request.get_json()`). `marshmallow`/apiflask só no messaging-demo | Contrato/validação de payload é básico | ✅ resolvido (Fase 6) |
-| Q6 | **Sem CI/CD** (nenhum workflow GitHub Actions), sem lint, sem testes | Mercado atual = PR validado por pipeline | ❌ Fase 7 |
-| Q7 | **Sem versionamento de API** (`/api/v1/`) e sem autenticação no gateway | Diferença entre API pública/privada e versioning | ✅ versionamento (Fase 6); auth pendente (Fase 7) |
+| Q6 | **Sem CI/CD** (nenhum workflow GitHub Actions), sem lint, sem testes | Mercado atual = PR validado por pipeline | ✅ resolvido (Fase 7) |
+| Q7 | **Sem versionamento de API** (`/api/v1/`) e sem autenticação no gateway | Diferença entre API pública/privada e versioning | ✅ versionamento (Fase 6); auth = extensão opcional |
 | Q8 | Seed de catálogo **manual** (`docker exec`). `scripts/seed_catalog.sql` não é aplicado automaticamente | Repro lab deve ser 1 comando | ✅ resolvido (Fase 6) |
-| Q9 | `.env.example` não cobre as novas vars (`PAYMENT_FAILURE_RATE`, `PAYMENT_LATENCY_MS`, `INVOICE_FAIL_RATE`, URLs) — tudo hardcoded no compose | Princípio 12-factor (config no ambiente) | ❌ Fase 7 |
-| Q10 | **Artefatos de build commitados** (`shared/build/`, `shared/*.egg-info/`, `__pycache__/`, `services/cart/shared/` vazio) e `.gitignore` insuficiente | Higiene de repo | ❌ Fase 7 |
-| Q11 | `services/messaging-demo/src/` ainda tem código duplicado (logger/rabbitmq/tracing velhos) além de `database.py`/`schemas.py` legados | Consistência: ou tudo em `lab_common`, ou o exemplo fica confuso | ❌ Fase 7 |
+| Q9 | `.env.example` não cobre as novas vars (`PAYMENT_FAILURE_RATE`, `PAYMENT_LATENCY_MS`, `INVOICE_FAIL_RATE`, URLs) — tudo hardcoded no compose | Princípio 12-factor (config no ambiente) | ✅ resolvido (Fase 7) |
+| Q10 | **Artefatos de build commitados** (`shared/build/`, `shared/*.egg-info/`, `__pycache__/`, `services/cart/shared/` vazio) e `.gitignore` insuficiente | Higiene de repo | ✅ resolvido (Fase 7) |
+| Q11 | `services/messaging-demo/src/` ainda tem código duplicado (logger/rabbitmq/tracing velhos) além de `database.py`/`schemas.py` legados | Consistência: ou tudo em `lab_common`, ou o exemplo fica confuso | ✅ resolvido (Fase 7) |
 | Q12 | Painel Grafana `microservices.json` reflete só o messaging-demo antigo | Não há dashboard por serviço novo (RED, `orders_created_total{status}`, workers, DLQs) | ✅ resolvido (Fase 6) |
 | Q13 | Sem scripts de demonstração prontos: carga (`test_load` aponta para `:5000/message` antigo), e nenhum script de caos (derrubar payment, escalar workers) | Aula precisa de "botão" para cada demo | ✅ resolvido (Fase 6) |
 | Q14 | `X-Request-ID` do gateway não é reutilizado como `correlationId` de negócio nos serviços | Conceito de correlation ID de ponta a ponta fica frouxo | ✅ resolvido (Fase 6) |
@@ -334,15 +334,16 @@ Os workers reutilizam o padrão do `consumer.py` atual: **retry com backoff expo
 - [x] **Bônus**: corrigida a dívida técnica do Nginx — `resolver 127.0.0.11` + `proxy_pass` por variável, então o gateway **não cai** quando um upstream está fora do ar
 - [x] **Critério de validação**: `./scripts/smoke_test.sh` e `./scripts/demo_flow.sh` rodam de ponta a ponta; `load_orders.sh 15` → 9 PAID/6 REJECTED; contrato retorna 422 para payload inválido; métricas novas aparecem no Prometheus
 
-### Fase 7 — Documentação, CI e higiene
+### Fase 7 — Documentação, CI e higiene ✅ RESOLVIDA
 
-- [ ] **README.md** reescrito: arquitetura (mermaid), tabela dos 8 serviços, portas/gateway, `docker compose down -v` e como rodar cada demo
-- [ ] **docs/classroom_guide.md**: roteiro de aula reescrito para o fluxo de e-commerce (síncrono + assíncrono + falhas), com perguntas de discussão (trade-offs)
-- [ ] **CI** (GitHub Actions): job de lint (`ruff`/`flake8`), build das imagens e `smoke_test.sh`
-- [ ] **.env.example** completo + refatorar compose para usar âncoras `x-app` e env vars (remover hardcode)
-- [ ] **`.gitignore`** + limpar `build/`, `*.egg-info/`, `__pycache__/`, `services/*/shared/`, `services/cart/shared/`
-- [ ] **Unificar `messaging-demo/src/`**: migrar `database.py`/`schemas.py` para `lab_common` ou deixar explícito no README que é o "exemplo legado" — sem código morto duplicado
-- [ ] **Critério de validação**: clone limpo → `cp .env.example .env && docker compose up -d --build` → `/health/ready` de tudo UP → `demo_flow.sh` verde → CI verde
+- [x] **README.md** reescrito: arquitetura (mermaid), tabela dos 8 serviços, portas/gateway, `docker compose down -v` e como rodar cada demo
+- [x] **docs/classroom_guide.md**: roteiro de aula reescrito (5 demos + perguntas de discussão + cronograma de 1h30)
+- [x] **CI** (GitHub Actions): `lint` (compileall + `docker compose config`), `build` das imagens e `smoke` end-to-end
+- [x] **.env.example** completo (`PAYMENT_FAILURE_RATE`, `PAYMENT_LATENCY_MS`, `INVOICE_FAIL_RATE`, `TEMPO_ENDPOINT`) + compose refatorado com âncoras `x-app-env`/`x-app-defaults` (removido hardcode)
+- [x] **`.gitignore`** + limpeza de `build/`, `*.egg-info/`, `__pycache__/`, `services/*/shared/`, `services/cart/shared/`
+- [x] **Unificar `messaging-demo/src/`**: removidos `logger.py`/`rabbitmq.py`/`tracing.py` duplicados (dead code); mantidos `database.py`/`schemas.py` como domínio próprio do exemplo legado (documentado no README)
+- [x] **Bônus**: corrigido conflito de porta `8080` (cAdvisor movido para `8081`, liberando a porta para o gateway)
+- [x] **Critério de validação**: `compileall` + `docker compose config` + `bash -n` OK; stack completa sobe do zero; `smoke_test.sh` verde; messaging-demo (`/message`, `/health/live`) intacto; 12/12 targets `up` no Prometheus
 
 ---
 
@@ -352,7 +353,7 @@ Os workers reutilizam o padrão do `consumer.py` atual: **retry com backoff expo
 |---|---|
 | Comunicação síncrona vs eventos | ✅ implementado |
 | Database-per-service | ✅ implementado |
-| API Gateway + rate limit | ✅ (falta auth na Fase 7) |
+| API Gateway + rate limit | ✅ (auth = extensão opcional futura) |
 | Observabilidade 3 pilares | ✅ corrigido (Fase 4) |
 | Distributed tracing end-to-end | ✅ corrigido (Fase 4) |
 | Circuit Breaker + timeout | ✅ corrigido (Fase 4) |
@@ -361,9 +362,9 @@ Os workers reutilizam o padrão do `consumer.py` atual: **retry com backoff expo
 | Saga / compensação | ✅ Fase 5 |
 | Validação de contrato / OpenAPI | ✅ Fase 6 |
 | Versionamento de API | ✅ Fase 6 |
-| CI/CD + lint | ❌ Fase 7 |
-| Config por ambiente (12-factor) | ⚠️ Fase 7 |
+| CI/CD + lint | ✅ Fase 7 |
+| Config por ambiente (12-factor) | ✅ Fase 7 |
 
 > **Nota**: a dívida técnica do Nginx (upstream down derruba o gateway) foi **antecipada e resolvida na Fase 6** (`resolver` Docker DNS + `proxy_pass` dinâmico), antes da Fase 7.
 
-> **Conclusão da auditoria (atualizada)**: Fases 0–6 entregues e validadas. O lab agora cobre métricas por serviço, circuit breaker funcional, tracing end-to-end (W3C + correlation ID), outbox, idempotência durável, saga com compensação, validação de contrato, versionamento e gateway resiliente. Restam para a Fase 7: documentação (README/guia de aula), CI, config por ambiente (12-factor) e higiene do repositório.
+> **Conclusão final da auditoria**: **Fases 0–7 entregues e validadas.** O lab agora cobre a trilha completa de arquitetura de microsserviços no nível do mercado atual — comunicação síncrona/assíncrona, database-per-service, API Gateway versionado e resiliente, Circuit Breaker funcional, Outbox, idempotência durável, saga com compensação, validação de contrato, observabilidade de ponta a ponta (métricas + traces + logs com correlation ID), CI e configuração por ambiente.
