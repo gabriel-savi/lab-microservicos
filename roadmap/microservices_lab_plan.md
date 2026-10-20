@@ -285,17 +285,17 @@ Os workers reutilizam o padrão do `consumer.py` atual: **retry com backoff expo
 | Q1 | **Sem Outbox / mensageria transacional** (`publish` depois do commit) | padrão obrigatório em sistemas de pedidos | ✅ resolvido (Fase 5) |
 | Q2 | **Idempotência só em memória** (sem constraint `unique`) | não sobrevive a restart/replica | ✅ resolvido (Fase 5) |
 | Q3 | **`order.rejected` não é consumido** — saga só narrativa | compensação é tema cobrado no mercado | ✅ resolvido (Fase 5) |
-| Q4 | **`README.md` e `docs/classroom_guide.md` desatualizados** — ainda descrevem só o lab antigo de observabilidade, sem os 8 serviços | Aluno novo não sabe nem o que existe |
-| Q5 | **Validação de entrada ausente** nos serviços novos (só `request.get_json()`). `marshmallow`/apiflask só no messaging-demo | Contrato/validação de payload é básico |
-| Q6 | **Sem CI/CD** (nenhum workflow GitHub Actions), sem lint, sem testes | Mercado atual = PR validado por pipeline |
-| Q7 | **Sem versionamento de API** (`/api/v1/`) e sem autenticação no gateway | Diferença entre API pública/privada e versioning |
-| Q8 | Seed de catálogo **manual** (`docker exec`). `scripts/seed_catalog.sql` não é aplicado automaticamente | Repro lab deve ser 1 comando |
-| Q9 | `.env.example` não cobre as novas vars (`PAYMENT_FAILURE_RATE`, `PAYMENT_LATENCY_MS`, `INVOICE_FAIL_RATE`, URLs) — tudo hardcoded no compose | Princípio 12-factor (config no ambiente) |
-| Q10 | **Artefatos de build commitados** (`shared/build/`, `shared/*.egg-info/`, `__pycache__/`, `services/cart/shared/` vazio) e `.gitignore` insuficiente | Higiene de repo |
-| Q11 | `services/messaging-demo/src/` ainda tem código duplicado (logger/rabbitmq/tracing velhos) além de `database.py`/`schemas.py` legados | Consistência: ou tudo em `lab_common`, ou o exemplo fica confuso |
-| Q12 | Painel Grafana `microservices.json` reflete só o messaging-demo antigo | Não há dashboard por serviço novo (RED, `orders_created_total{status}`, workers, DLQs) |
-| Q13 | Sem scripts de demonstração prontos: carga (`test_load` aponta para `:5000/message` antigo), e nenhum script de caos (derrubar payment, escalar workers) | Aula precisa de "botão" para cada demo |
-| Q14 | `X-Request-ID` do gateway não é reutilizado como `correlationId` de negócio nos serviços | Conceito de correlation ID de ponta a ponta fica frouxo |
+| Q4 | **`README.md` e `docs/classroom_guide.md` desatualizados** — ainda descrevem só o lab antigo de observabilidade, sem os 8 serviços | Aluno novo não sabe nem o que existe | ❌ Fase 7 |
+| Q5 | **Validação de entrada ausente** nos serviços novos (só `request.get_json()`). `marshmallow`/apiflask só no messaging-demo | Contrato/validação de payload é básico | ✅ resolvido (Fase 6) |
+| Q6 | **Sem CI/CD** (nenhum workflow GitHub Actions), sem lint, sem testes | Mercado atual = PR validado por pipeline | ❌ Fase 7 |
+| Q7 | **Sem versionamento de API** (`/api/v1/`) e sem autenticação no gateway | Diferença entre API pública/privada e versioning | ✅ versionamento (Fase 6); auth pendente (Fase 7) |
+| Q8 | Seed de catálogo **manual** (`docker exec`). `scripts/seed_catalog.sql` não é aplicado automaticamente | Repro lab deve ser 1 comando | ✅ resolvido (Fase 6) |
+| Q9 | `.env.example` não cobre as novas vars (`PAYMENT_FAILURE_RATE`, `PAYMENT_LATENCY_MS`, `INVOICE_FAIL_RATE`, URLs) — tudo hardcoded no compose | Princípio 12-factor (config no ambiente) | ❌ Fase 7 |
+| Q10 | **Artefatos de build commitados** (`shared/build/`, `shared/*.egg-info/`, `__pycache__/`, `services/cart/shared/` vazio) e `.gitignore` insuficiente | Higiene de repo | ❌ Fase 7 |
+| Q11 | `services/messaging-demo/src/` ainda tem código duplicado (logger/rabbitmq/tracing velhos) além de `database.py`/`schemas.py` legados | Consistência: ou tudo em `lab_common`, ou o exemplo fica confuso | ❌ Fase 7 |
+| Q12 | Painel Grafana `microservices.json` reflete só o messaging-demo antigo | Não há dashboard por serviço novo (RED, `orders_created_total{status}`, workers, DLQs) | ✅ resolvido (Fase 6) |
+| Q13 | Sem scripts de demonstração prontos: carga (`test_load` aponta para `:5000/message` antigo), e nenhum script de caos (derrubar payment, escalar workers) | Aula precisa de "botão" para cada demo | ✅ resolvido (Fase 6) |
+| Q14 | `X-Request-ID` do gateway não é reutilizado como `correlationId` de negócio nos serviços | Conceito de correlation ID de ponta a ponta fica frouxo | ✅ resolvido (Fase 6) |
 
 ---
 
@@ -310,7 +310,7 @@ Os workers reutilizam o padrão do `consumer.py` atual: **retry com backoff expo
 - [x] **init.sql**: listar os 7 databases (core + workers); documentar `docker compose down -v` para reset e criar um `scripts/reset_db.sh` que cria os DBs sem apagar o volume
 - [x] **Critério de validação**: 9/10 targets `up` no Prometheus (só `cadvisor` down no macOS); trace único no Tempo (W3C injetado no HTTP confirmado); CB abriu após `fail_max=2` e passou a rejeitar com `CircuitBreakerError` imediato
 
-> **Anotação (dívida técnica descoberta)**: o Nginx falha em iniciar se um upstream estiver parado (`host not found in upstream`). Movida para a Fase 7 como *gateway resiliente* (resolver Docker DNS + `proxy_pass` por variável).
+> **Anotação (dívida técnica descoberta)**: o Nginx falhava em iniciar se um upstream estivesse parado (`host not found in upstream`). ✅ Resolvida na Fase 6 com `resolver 127.0.0.11` + `proxy_pass` por variável.
 
 ### Fase 5 — Confiabilidade de produção (Outbox, idempotência real, saga) ✅ RESOLVIDA
 
@@ -322,16 +322,17 @@ Os workers reutilizam o padrão do `consumer.py` atual: **retry com backoff expo
 
 > **Nota de migração**: `create_all` não altera tabelas existentes; em volume pré-existente, aplicar `ALTER TABLE ... UNIQUE` manual (feito neste ambiente) ou `docker compose down -v` para recreatedo zero.
 
-### Fase 6 — Contrato, gateway e demonstração
+### Fase 6 — Contrato, gateway e demonstração ✅ RESOLVIDA
 
-- [ ] **Validação com marshmallow/apiflask** (`@app.input` + schemas) nos 4 serviços core, com OpenAPI (`/docs`) exposto via gateway
-- [ ] **Versionamento** `/api/v1/*` nos serviços e no Nginx
-- [ ] **`X-Correlation-ID`→`correlationId` de negócio**: middleware compartilhado que lê o header (ou gera) e usa como correlation id nos logs/spans/subsequentes
-- [ ] **Seed automático** do catálogo (idempotente no startup do catalog ou init container)
-- [ ] **Dashboard Grafana** reorganizado: RED por serviço + `orders_created_total{status}` + contadores dos workers + DLQ por fila
-- [ ] **Scripts de aula**: `scripts/demo_flow.sh` (happy path), `scripts/demo_chaos.sh` (derrubar payment, escalar `--scale`, encher DLQ), `scripts/load_orders.sh`
-- [ ] **Coleção Postman** reorganizada por domínio (catálogo, carrinho, pedidos, observabilidade)
-- [ ] **Critério de validação**: `./scripts/demo_flow.sh` roda de ponta a ponta sem passos manuais
+- [x] **Validação com marshmallow/apiflask** (`@app.input` + schemas) nos 4 serviços core, com OpenAPI (`/docs`/`openapi.json`) exposto via gateway
+- [x] **Versionamento** `/api/v1/*` no Nginx (API pública versionada; chamadas internas service-to-service seguem sem prefixo)
+- [x] **`X-Correlation-ID`→`correlationId` de negócio**: middleware compartilhado (`lab_common.correlation`) que lê o header (ou gera) e o propaga nas chamadas HTTP (`http_client`)
+- [x] **Seed automático** do catálogo (idempotente no startup do catalog — `seed_if_empty`)
+- [x] **Dashboard Grafana** `E-commerce Microservices`: pedidos por status, pagamentos, HTTP por serviço, eventos assíncronos, erros/DLQ
+- [x] **Scripts de aula**: `scripts/demo_flow.sh` (happy path), `scripts/demo_chaos.sh` (derrubar payment + CB), `scripts/load_orders.sh` (carga), `smoke_test.sh` atualizado para `/api/v1`
+- [x] **Coleção Postman** reorganizada (`docs/Postman_Collection_Ecommerce.json`) por domínio
+- [x] **Bônus**: corrigida a dívida técnica do Nginx — `resolver 127.0.0.11` + `proxy_pass` por variável, então o gateway **não cai** quando um upstream está fora do ar
+- [x] **Critério de validação**: `./scripts/smoke_test.sh` e `./scripts/demo_flow.sh` rodam de ponta a ponta; `load_orders.sh 15` → 9 PAID/6 REJECTED; contrato retorna 422 para payload inválido; métricas novas aparecem no Prometheus
 
 ### Fase 7 — Documentação, CI e higiene
 
@@ -351,15 +352,18 @@ Os workers reutilizam o padrão do `consumer.py` atual: **retry com backoff expo
 |---|---|
 | Comunicação síncrona vs eventos | ✅ implementado |
 | Database-per-service | ✅ implementado |
-| API Gateway + rate limit | ✅ (falta auth na Fase 6) |
+| API Gateway + rate limit | ✅ (falta auth na Fase 7) |
 | Observabilidade 3 pilares | ✅ corrigido (Fase 4) |
 | Distributed tracing end-to-end | ✅ corrigido (Fase 4) |
 | Circuit Breaker + timeout | ✅ corrigido (Fase 4) |
 | Outbox / mensageria transacional | ✅ Fase 5 |
 | Idempotência durável | ✅ Fase 5 |
 | Saga / compensação | ✅ Fase 5 |
-| Validação de contrato / OpenAPI | ⚠️ Fase 6 |
+| Validação de contrato / OpenAPI | ✅ Fase 6 |
+| Versionamento de API | ✅ Fase 6 |
 | CI/CD + lint | ❌ Fase 7 |
 | Config por ambiente (12-factor) | ⚠️ Fase 7 |
 
-> **Conclusão da auditoria**: a estrutura de microserviços está correta e os fluxos funcionam, mas o lab ainda **não ensina de verdade** três pilares prometidos (métricas por serviço, circuit breaker, tracing entre serviços) e não cobre padrões de produção essenciais (outbox, idempotência durável, saga, CI). Com as Fases 4–7, o projeto fica condizente com "arquitetura no mercado atual" para alunos de Ciência da Computação na USP.
+> **Nota**: a dívida técnica do Nginx (upstream down derruba o gateway) foi **antecipada e resolvida na Fase 6** (`resolver` Docker DNS + `proxy_pass` dinâmico), antes da Fase 7.
+
+> **Conclusão da auditoria (atualizada)**: Fases 0–6 entregues e validadas. O lab agora cobre métricas por serviço, circuit breaker funcional, tracing end-to-end (W3C + correlation ID), outbox, idempotência durável, saga com compensação, validação de contrato, versionamento e gateway resiliente. Restam para a Fase 7: documentação (README/guia de aula), CI, config por ambiente (12-factor) e higiene do repositório.

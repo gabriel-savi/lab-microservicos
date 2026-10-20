@@ -6,13 +6,16 @@ from lab_common.logger import setup_logger
 from lab_common.tracing import init_tracing
 from lab_common.health import make_health_blueprint
 from lab_common.http_client import HttpClient
+from lab_common.correlation import correlation_middleware
 from models import init_db, SessionLocal, Cart, CartItem
+from schemas import CartItemIn
 from sqlalchemy import text
 
 app = APIFlask(__name__, title='Cart Service', version='1.0.0')
 logger = setup_logger('cart')
 init_tracing('cart-service', app)
 init_db()
+correlation_middleware(app)
 hc = HttpClient()
 
 CATALOG_URL = os.getenv('CATALOG_URL', 'http://catalog:5000')
@@ -38,11 +41,11 @@ def get_cart(cid):
 
 
 @app.post('/carts/<cid>/items')
-def add_item(cid):
+@app.input(CartItemIn)
+def add_item(cid, json_data):
     REQUEST_COUNT.labels(method='POST', endpoint='/carts/:id/items').inc()
-    data = request.get_json() or {}
-    pid = data.get('productId')
-    qty = int(data.get('quantity', 1))
+    pid = json_data.get('productId')
+    qty = int(json_data.get('quantity', 1))
     try:
         r = hc.call(f'{CATALOG_URL}/products/{pid}', method='GET', timeout=2)
         prod = r.json()

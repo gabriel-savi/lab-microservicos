@@ -2,11 +2,12 @@ from urllib.parse import urlparse
 import pybreaker
 import requests
 from opentelemetry import propagate
+from .correlation import get_correlation_id
 
 
 class HttpClient:
     """Cliente HTTP com Circuit Breaker persistente por downstream e
-    propagação de contexto W3C (distributed tracing).
+    propagação de contexto W3C (distributed tracing) + X-Correlation-ID.
     """
 
     def __init__(self):
@@ -36,6 +37,10 @@ class HttpClient:
             # Injeta o contexto de tracing (W3C Trace Context) nos headers,
             # permitindo que o trace atravesse as chamadas HTTP entre serviços.
             propagate.inject(headers)
+            # Propaga o correlation id de negócio quando existir
+            cid = get_correlation_id()
+            if cid:
+                headers['X-Correlation-ID'] = cid
             r = requests.request(method, url, json=json, timeout=timeout, headers=headers)
             if r.status_code >= 500:
                 raise Exception(f"HTTP {r.status_code}")

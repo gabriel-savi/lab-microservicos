@@ -7,7 +7,9 @@ from prometheus_client import generate_latest, CONTENT_TYPE_LATEST, Counter
 from lab_common.logger import setup_logger
 from lab_common.tracing import init_tracing
 from lab_common.health import make_health_blueprint
+from lab_common.correlation import correlation_middleware
 from models import init_db, SessionLocal, Payment
+from schemas import PaymentIn
 from sqlalchemy import text
 
 REQUEST_COUNT = Counter('http_requests_total', 'Total HTTP requests', ['method', 'endpoint'])
@@ -17,6 +19,7 @@ app = APIFlask(__name__, title='Payment Service', version='1.0.0')
 logger = setup_logger('payment')
 init_tracing('payment-service', app)
 init_db()
+correlation_middleware(app)
 
 FAIL_RATE = float(os.getenv('PAYMENT_FAILURE_RATE', '0.2'))
 LATENCY_MS = int(os.getenv('PAYMENT_LATENCY_MS', '0'))
@@ -34,9 +37,10 @@ app.register_blueprint(make_health_blueprint(check_db=check_db))
 
 
 @app.post('/payments')
-def create_payment():
+@app.input(PaymentIn)
+def create_payment(json_data):
     REQUEST_COUNT.labels(method='POST', endpoint='/payments').inc()
-    data = request.get_json() or {}
+    data = json_data
     if LATENCY_MS > 0:
         time.sleep(LATENCY_MS / 1000.0)
     status = 'REJECTED' if random.random() < FAIL_RATE else 'APPROVED'

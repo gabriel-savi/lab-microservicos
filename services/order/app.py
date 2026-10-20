@@ -10,7 +10,9 @@ from lab_common.logger import setup_logger
 from lab_common.tracing import init_tracing
 from lab_common.health import make_health_blueprint
 from lab_common.http_client import HttpClient
+from lab_common.correlation import correlation_middleware
 from models import init_db, SessionLocal, Order, OutboxEvent
+from schemas import CreateOrderIn
 from sqlalchemy import text
 from datetime import datetime, timezone
 from lab_common.rabbitmq import rabbitmq_service
@@ -19,6 +21,7 @@ app = APIFlask(__name__, title='Order Service', version='1.0.0')
 logger = setup_logger('order')
 init_tracing('order-service', app)
 init_db()
+correlation_middleware(app)
 hc = HttpClient()
 
 CART_URL = os.getenv('CART_URL', 'http://cart:5000')
@@ -123,10 +126,10 @@ def outbox_relay(stop_event):
 
 
 @app.post('/orders')
-def create_order():
+@app.input(CreateOrderIn)
+def create_order(json_data):
     REQUEST_COUNT.labels(method='POST', endpoint='/orders').inc()
-    data = request.get_json() or {}
-    cart_id = data.get('cartId')
+    cart_id = json_data.get('cartId')
     try:
         r = hc.call(f'{CART_URL}/carts/{cart_id}', method='GET', timeout=2)
         cart = r.json()

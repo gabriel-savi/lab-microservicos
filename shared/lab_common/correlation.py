@@ -1,0 +1,39 @@
+import uuid
+from contextvars import ContextVar
+from flask import request, g
+
+# Correlation ID de negócio: começa no gateway (X-Correlation-ID) e é
+# propagado através de chamadas HTTP (via lab_common.http_client) e mensagens.
+_correlation_id: ContextVar = ContextVar('correlation_id', default=None)
+
+
+def set_correlation_id(cid: str) -> None:
+    _correlation_id.set(cid)
+
+
+def get_correlation_id() -> str:
+    return _correlation_id.get()
+
+
+def correlation_middleware(app):
+    """Lê (ou gera) o X-Correlation-ID da requisição e o ecoa na resposta.
+
+    Use em qualquer serviço: `correlation_middleware(app)` após criar o Flask.
+    """
+
+    @app.before_request
+    def _before_request():
+        cid = (
+            request.headers.get('X-Correlation-ID')
+            or request.headers.get('X-Request-ID')
+            or str(uuid.uuid4())
+        )
+        set_correlation_id(cid)
+        g.correlation_id = cid
+
+    @app.after_request
+    def _after_request(resp):
+        cid = get_correlation_id() or getattr(g, 'correlation_id', None)
+        if cid:
+            resp.headers['X-Correlation-ID'] = cid
+        return resp
