@@ -13,11 +13,12 @@ datasources:
         spanStartTimeShift: "-1m"
         spanEndTimeShift: "1m"
         tags:
+          - key: traceId
           - key: correlationId
         filterByTraceID: false
         filterBySpanID: false
         customQuery: true
-        query: '{app="api-rest"} | json | correlationId="${__span.tags.correlationId}"'
+        query: '{job="dockerlogs", is_app="true"} | json | traceId="${__span.traceId}" or correlationId="${__span.tags.correlationId}"'
       serviceMap:
         datasourceUid: prometheus
       nodeGraph:
